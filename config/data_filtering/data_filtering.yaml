@@ -3,6 +3,7 @@ data_paths:
   patient_diagnosis: '/Volumes/MIREIA/M-THESIS/DATA/tcia-diagnosis-data-2012-04-20.xls'
   patient_images: '/Volumes/MIREIA/M-THESIS/DATA/manifest-1600709154662/LIDC-IDRI'
   new_metadata: '/Volumes/MIREIA/M-THESIS/DATA/filtered_metadata.csv'
+  new_images: '/Volumes/MIREIA/M-THESIS/DATA/filtered_images'
 
 subgroup_attributes: ['Patient Sex', 'Patient Age']
 
