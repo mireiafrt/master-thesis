@@ -1,0 +1,16 @@
+data_paths:
+  patient_metadata: '/Volumes/MIREIA/M-THESIS/DATA/TCIA_LIDC-IDRI_20200921-nbia-digest.xlsx'
+  patient_diagnosis: '/Volumes/MIREIA/M-THESIS/DATA/tcia-diagnosis-data-2012-04-20.xls'
+  patient_images: '/Volumes/MIREIA/M-THESIS/DATA/manifest-1600709154662/LIDC-IDRI'
+  new_metadata: '/Volumes/MIREIA/M-THESIS/DATA/filtered_metadata.csv'
+
+subgroup_attributes: ['Patient Sex', 'Patient Age']
+
+col_binary_target: 
+  new_col_name: 'binary_diagnosis_patient'
+  old_non_binary_col: |
+    Diagnosis at the Patient Level
+    0=Unknown
+    1=benign or non-malignant disease
+    2= malignant, primary lung cancer
+    3 = malignant metastatic
