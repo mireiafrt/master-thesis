@@ -104,7 +104,7 @@ def process_patients(patients_info, config_data_paths):
                             xml_file = [f for f in os.listdir(subsubfolder_path) if f.endswith('.xml')]
                             dicom_files = [f for f in os.listdir(subsubfolder_path) if f.endswith('.dcm')]
                             
-                            # Check if this subsubfolder matches the patient info
+                            # Check if this subsubfolder matches the patient CT serie's info
                             patient_series_number = int(patients_info[patient_id]['Series Number'])
                             if series_number == patient_series_number:
                                 # Copy all DICOM files and the XML file to the new destination
@@ -115,7 +115,7 @@ def process_patients(patients_info, config_data_paths):
     # Check for missing patients by comparing folder names in dst_dir with patient IDs in the dictionary
     processed_patient_folders = os.listdir(dst_dir)
     missing_patients = [id for id in patients_info.keys() if id not in processed_patient_folders]
-    print(f"Data transfer complete. {len(processed_patient_folders)} patient folders present on destinatior directory.")
+    print(f"Data transfer complete. {len(processed_patient_folders)} patient folders present on destination directory.")
 
     if missing_patients:
         print("The following valid patient(s) were not succesfully processed:", missing_patients)
