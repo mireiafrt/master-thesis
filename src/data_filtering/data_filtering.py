@@ -21,7 +21,7 @@ def get_valid_patients(config_data_paths, config_subgroup_attributes, config_col
     """
     This function filters the patient metadata to keep patients with non null age and gender, as well as a diagnosis.
     Also, we only consider instances with CT scans modality.
-    It returns a dictionary with 'Patient ID' as key and 2 value attributes for 'Series Number' and 'Image Count'.
+    It returns a dictionary with 'Patient ID' as key and 1 value attributes for 'Series Number'.
     This dictionary will help filter the folder of images per patient.
     """
     # read patient metadata
@@ -52,7 +52,7 @@ def get_valid_patients(config_data_paths, config_subgroup_attributes, config_col
     df.to_csv(config_data_paths['new_metadata'], index=False)
 
     # Filter the DataFrame to only include necessary columns to filter image folder
-    sub_df = df[['Patient ID', 'Series Number', 'Image Count']]
+    sub_df = df[['Patient ID', 'Series Number']]
     # Convert to a dictionary with 'Patient ID' as the key and the rest as a nested dictionary
     filtering_criteria_dict = sub_df.set_index('Patient ID').apply(lambda row: row.to_dict(), axis=1).to_dict()
     return filtering_criteria_dict
@@ -65,7 +65,6 @@ def process_patients(patients_info, config_data_paths):
     It creates a new directory.
 
     To ensure the right modality of images is kept for each valid patient, we compare the sub-folder names to the "Series Number",
-    and make sure the number of images in the subdirectory matches the "Image Count" data.
 
     Additionally, each XML of the patients is also kept.
     """
@@ -107,8 +106,7 @@ def process_patients(patients_info, config_data_paths):
                             
                             # Check if this subsubfolder matches the patient info
                             patient_series_number = int(patients_info[patient_id]['Series Number'])
-                            patient_image_count = int(patients_info[patient_id]['Image Count'])
-                            if series_number == patient_series_number and len(dicom_files) == patient_image_count:
+                            if series_number == patient_series_number:
                                 # Copy all DICOM files and the XML file to the new destination
                                 for file in dicom_files + xml_file:
                                     shutil.copy(os.path.join(subsubfolder_path, file), dst_patient_path)
