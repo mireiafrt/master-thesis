@@ -78,7 +78,6 @@ def process_patients(patients_info, config_data_paths):
         os.makedirs(dst_dir)
 
     patient_folders = os.listdir(src_dir)
-    num_processed = 0  # Counter for tracking number of new valid patient folders
 
     # Process each patient directory with a progress bar
     for patient_folder in tqdm(patient_folders, desc='Processing patients', unit='folder'):
@@ -91,7 +90,6 @@ def process_patients(patients_info, config_data_paths):
             # Ensure destination patient folder exists
             if not os.path.exists(dst_patient_path):
                 os.makedirs(dst_patient_path)
-                num_processed += 1  # Increment the count when a new folder is created
 
             # Process each subfolder in the patient directory
             for subfolder in os.listdir(src_patient_path):
@@ -102,7 +100,7 @@ def process_patients(patients_info, config_data_paths):
                         subsubfolder_path = os.path.join(subfolder_path, subsubfolder)
                         if os.path.isdir(subsubfolder_path):
                             # Extract series number and check against dictionary of valid patients
-                            series_number = int(subsubfolder.split('-')[0])
+                            series_number = int(float(subsubfolder.split('-')[0]))
                             # Find XML and DICOM files
                             xml_file = [f for f in os.listdir(subsubfolder_path) if f.endswith('.xml')]
                             dicom_files = [f for f in os.listdir(subsubfolder_path) if f.endswith('.dcm')]
@@ -115,8 +113,15 @@ def process_patients(patients_info, config_data_paths):
                                 for file in dicom_files + xml_file:
                                     shutil.copy(os.path.join(subsubfolder_path, file), dst_patient_path)
 
-    # Print summary information once the processing is complete
-    print(f"Data transfer complete. {num_processed} patient folders have been processed.")
+    
+    # Check for missing patients by comparing folder names in dst_dir with patient IDs in the dictionary
+    processed_patient_folders = os.listdir(dst_dir)
+    missing_patients = [id for id in patients_info.keys() if id not in processed_patient_folders]
+    print(f"Data transfer complete. {len(processed_patient_folders)} patient folders present on destinatior directory.")
+
+    if missing_patients:
+        print("The following valid patient(s) were not succesfully processed:", missing_patients)
+
 
 
 def main():
@@ -130,7 +135,7 @@ def main():
 
     # get the patient ids we will keep
     filtering_criteria_dict = get_valid_patients(config_data_paths, config_subgroup_attributes, config_col_binary_target)
-    print(len(filtering_criteria_dict))
+    print(f"Patients detected to be kept: {len(filtering_criteria_dict)}")
 
     # filter the images with the appropiate patients and image modalities, and save it to new directory
     process_patients(filtering_criteria_dict, config_data_paths)
