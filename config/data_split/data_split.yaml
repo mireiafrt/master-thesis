@@ -1,0 +1,13 @@
+metadata_path: 'data/metadata.csv'
+source_root: '/Volumes/MIREIA/M-THESIS/DATA/filtered_images'
+target_root: 'data/data_split'
+
+stratify_columns: ['Patient Sex', 'age_group']
+
+split_sizes:
+  train: 0.30
+  val: 0.10
+  test: 0.35
+  ground_truth: 0.25
+
+min_group_size: 4
