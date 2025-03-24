@@ -1,0 +1,13 @@
+paths:
+  metadata: "data/metadata.csv"
+  data_split: "data/data_split"
+  model_output: "classifier/densenet_model.pth"
+
+columns:
+  patient_id: "Patient ID"
+  diagnosis: "binary_diagnosis_patient"
+
+training:
+  batch_size: 2
+  num_epochs: 10
+  learning_rate: 1e-4
