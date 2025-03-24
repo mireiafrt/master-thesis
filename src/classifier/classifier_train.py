@@ -4,6 +4,7 @@ import torch
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from monai.transforms import Compose, Resize, NormalizeIntensity, ToTensor, RandRotate90
 from monai.networks.nets import DenseNet121
@@ -20,6 +21,9 @@ with open("classifier/config.yaml", "r") as f:
 paths = config["paths"]
 columns = config["columns"]
 training = config["training"]
+
+# Init writer
+writer = SummaryWriter(log_dir="runs/classifier")
 
 # Load metadata and get train and val sets
 metadata = pd.read_csv(paths["metadata"])
@@ -101,10 +105,19 @@ for epoch in range(training["num_epochs"]):
     val_acc = val_correct / val_total
     print(f"[Epoch {epoch+1}] Val Accuracy: {val_acc:.4f}")
 
+    # TensorBoard logging
+    writer.add_scalar("Loss/train", avg_loss, epoch)
+    writer.add_scalar("Accuracy/train", train_acc, epoch)
+    writer.add_scalar("Accuracy/val", val_acc, epoch)
+
+
 # Print model summary
 print(model)
 
 # Save model
 torch.save(model.state_dict(), paths["model_output"])
 print(f"Model saved to: {paths['model_output']}")
+
+# Close TensorBoard writer
+writer.close()
 
