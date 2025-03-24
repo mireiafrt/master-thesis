@@ -46,7 +46,7 @@ def get_valid_patients(config_data_paths, config_subgroup_attributes, config_col
 
     # create new bianry diagnosis column
     non_binary_col = config_col_binary_target['old_non_binary_col']
-    df[config_col_binary_target['new_col_name']] = np.where(df[non_binary_col] == 0,np.nan, np.where(df[non_binary_col].isin([2, 3]), 1, 0))
+    df[config_col_binary_target['new_col_name']] = np.where(df[non_binary_col].isin([2, 3]), 1, 0) # 1 for 2 or 3, 0 for 0 and 1
     
     # save the new filtered metadata file for later use
     df.to_csv(config_data_paths['new_metadata'], index=False)
