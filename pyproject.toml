@@ -19,7 +19,8 @@ dependencies = [
     "scikit-learn (>=1.6.1,<2.0.0)",
     "pydicom (>=3.0.1,<4.0.0)",
     "torch (>=2.6.0,<3.0.0)",
-    "monai-weekly[nibabel,ignite,tqdm] (>=1.5.dev2512,<2.0)"
+    "monai-weekly[nibabel,ignite,tqdm] (>=1.5.dev2512,<2.0)",
+    "tensorboard (>=2.19.0,<3.0.0)"
 ]
 
 [build-system]
