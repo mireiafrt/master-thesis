@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from monai.metrics import ROCAUCMetric
 from monai.data import Dataset, decollate_batch
-from monai.transforms import Compose, LoadImaged, ResizeD, NormalizeIntensityd, RandRotate90d, ToTensord, Activations, AsDiscrete, LambdaD
+from monai.transforms import Compose, LoadImaged, Resized, ScaleIntensityd, RandRotate90d, ToTensord, Activations, AsDiscrete, LambdaD
 from monai.networks.nets import DenseNet121
 
 
@@ -43,22 +43,37 @@ val_data = [
     for pid in val_df[columns["patient_id"]]
 ]
 
-# Define transforms
-transforms = Compose([
-    LoadImaged(keys=["img"], ensure_channel_first=True),
+# Define transformations for the training dataset.
+train_transforms = Compose([
+    LoadImaged(keys=["img"], ensure_channel_first=True),  # Load images and ensure channel dimension is first.
     LambdaD(keys=["img"], func=lambda x: x.permute(0, 3, 1, 2)),  # → [1, D, H, W]
-    ResizeD(keys=["img"], spatial_size=(64, 128, 128)),
-    NormalizeIntensityd(keys=["img"], nonzero=True),
-    #RandRotate90d(keys=["img"], prob=0.5, spatial_axes=[1, 3]),  # rotate D and W
-    ToTensord(keys=["img", "label"])
+    ScaleIntensityd(keys=["img"]),  # Normalize the intensity of the images.
+    Resized(keys=["img"], spatial_size=(96, 96, 96)),  # Resize images to 96x96x96 for consistent input size.
+    RandRotate90d(keys=["img"], prob=0.8, spatial_axes=[0, 2]),  # Randomly rotate images on specified axes with 80% probability.
 ])
 
-# Create MONAI Datasets and loaders
-train_ds = Dataset(data=train_data, transform=transforms)
-val_ds = Dataset(data=val_data, transform=transforms)
+# Define transformations for the validation dataset (no random rotations to maintain original orientation).
+val_transforms = Compose([
+    LoadImaged(keys=["img"], ensure_channel_first=True),  # Load images ensuring the channel dimension is first.
+    LambdaD(keys=["img"], func=lambda x: x.permute(0, 3, 1, 2)),  # → [1, D, H, W]
+    ScaleIntensityd(keys=["img"]),  # Normalize image intensities.
+    Resized(keys=["img"], spatial_size=(96, 96, 96)),  # Resize images to 96x96x96.
+])
 
-train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=2)
-val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=False, num_workers=2)
+# Post-processing for predictions using softmax activation to convert logits to probabilities.
+post_pred = Compose([Activations(softmax=True)])
+# Post-processing for labels to convert them to one-hot encoded format.
+post_label = Compose([AsDiscrete(to_onehot=2)])
+
+# Check device availability for CUDA-based operations
+pin_memory = torch.cuda.is_available()
+
+# Create MONAI Datasets and loaders
+train_ds = Dataset(data=train_data, transform=train_transforms)
+val_ds = Dataset(data=val_data, transform=val_transforms)
+
+train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=2, pin_memory=pin_memory)
+val_loader = DataLoader(val_ds, batch_size=training["batch_size"], num_workers=2, pin_memory=pin_memory)
 
 # Device setup
 if torch.cuda.is_available():
@@ -78,8 +93,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
 
 # Metrics
 auc_metric = ROCAUCMetric()
-post_pred = Activations(softmax=True)
-post_label = AsDiscrete(to_onehot=2)
 
 val_interval = 1
 best_metric = -1
@@ -136,8 +149,11 @@ for epoch in range(training["num_epochs"]):
 
         acc = (y_pred.argmax(dim=1) == y).sum().item() / len(y)
 
-        y_onehot = [post_label(i) for i in decollate_batch(y)]
-        y_pred_act = [post_pred(i) for i in decollate_batch(y_pred)]
+        # Post-processing directly on the full batch
+        y_pred_act = post_pred(y_pred) # no need to decollate here
+        y_onehot = [post_label(i) for i in decollate_batch(y, detach=False)]
+
+        # AUC Metric
         auc_metric(y_pred_act, y_onehot)
         auc = auc_metric.aggregate().item()
         auc_metric.reset()
@@ -150,6 +166,8 @@ for epoch in range(training["num_epochs"]):
         if acc > best_metric:
             best_metric = acc
             best_metric_epoch = epoch + 1
+            # Ensure output directory exists and save the model
+            os.makedirs(os.path.dirname(paths["model_output"]), exist_ok=True)
             torch.save(model.state_dict(), paths["model_output"])
             print("Saved new best model")
 
