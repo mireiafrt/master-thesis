@@ -16,6 +16,7 @@ with open("config/classifier/classifier_eval.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 paths = config["paths"]
+columns = config["columns"]
 
 # Device setup
 if torch.cuda.is_available():
@@ -35,7 +36,7 @@ test_df = metadata[metadata["split"] == "test"].copy()
 
 test_data = [
     {"img": os.path.join(paths['nifti_test'], f"{pid}.nii.gz"), "label": int(label), "Patient ID": pid}
-    for pid, label in zip(test_df["Patient ID"], test_df["label"])
+    for pid, label in zip(test_df[columns['patient_id']], test_df[columns['diagnosis']])
 ]
 
 # Transforms (no augmentation)

@@ -3,3 +3,7 @@ paths:
   metadata: "data/metadata.csv"
   nifti_test: "data/preprocessed_nifti/test"
   pred_output: "data/predictions.csv"
+
+columns:
+  patient_id: "Patient ID"
+  diagnosis: "binary_diagnosis_patient"
