@@ -1,6 +1,7 @@
 import os
 import pandas as pd
-from monai.transforms import LoadImage
+import torch
+from monai.transforms import Compose, LoadImage, Lambda
 import nibabel as nib
 
 # Config
@@ -12,8 +13,11 @@ SPLITS = ["train", "val", "test", "ground_truth"]
 metadata = pd.read_csv(METADATA_PATH)
 valid_ids = set(metadata["Patient ID"].astype(str))
 
-# MONAI loader
-loader = LoadImage(image_only=True, ensure_channel_first=True)
+# Define pipeline for shape check
+pipeline = Compose([
+    LoadImage(image_only=True, ensure_channel_first=True),
+    Lambda(lambda x: torch.tensor(x).permute(0, 3, 1, 2))  # [1, D, H, W]
+])
 
 for split in SPLITS:
     print(f"\n🔍 Checking NIfTI volumes in split: {split}")
@@ -33,12 +37,13 @@ for split in SPLITS:
             print(f"⚠️ {patient_id}: not found in metadata")
 
         try:
-            image = loader(nifti_path)
+            image_tensor = pipeline(nifti_path)
         except Exception as e:
-            print(f"❌ {patient_id}: Failed to load NIfTI — {e}")
+            print(f"❌ {patient_id}: Failed to load or permute — {e}")
             continue
 
-        if image.ndim != 4 or image.shape[0] != 1:
-            print(f"⚠️ {patient_id}: Unexpected shape: {image.shape}")
+        # check shape
+        if image_tensor.shape[0] != 1 or image_tensor.ndim != 4:
+            print(f"⚠️ {patient_id}: Unexpected shape: {image_tensor.shape}")
         else:
-            print(f"✅ {patient_id}: shape = {image.shape}")
+            print(f"✅ {patient_id}: final shape = {image_tensor.shape}")
