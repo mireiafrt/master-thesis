@@ -1,6 +1,7 @@
 paths:
   metadata: "data/metadata.csv"
   data_split: "data/data_split"
+  nifti_root: "data/preprocessed_nifti"
   model_output: "classifier/densenet_model.pth"
 
 columns:
