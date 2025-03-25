@@ -35,11 +35,11 @@ labels_dict = dict(zip(metadata[columns["patient_id"]], metadata[columns["diagno
 
 # Build MONAI-friendly data dicts
 train_data = [
-    {"img": os.path.join(paths["nifti_root"], "train", f"{pid}.nii.gz"), "label": labels_dict[pid]}
+    {"img": os.path.join(paths["nifti_root"], "train", f"{pid}.nii.gz"), "label": int(labels_dict[pid])}
     for pid in train_df[columns["patient_id"]]
 ]
 val_data = [
-    {"img": os.path.join(paths["nifti_root"], "val", f"{pid}.nii.gz"), "label": labels_dict[pid]}
+    {"img": os.path.join(paths["nifti_root"], "val", f"{pid}.nii.gz"), "label": int(labels_dict[pid])}
     for pid in val_df[columns["patient_id"]]
 ]
 
@@ -172,8 +172,5 @@ for epoch in range(training["num_epochs"]):
             print("Saved new best model")
 
 print(f"Training completed. Best accuracy: {best_metric:.4f} at epoch {best_metric_epoch}")
-
-torch.save(model.state_dict(), paths["model_output"])
-print(f"Model saved to: {paths['model_output']}")
 
 writer.close()
