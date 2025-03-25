@@ -7,11 +7,10 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from monai.metrics import ROCAUCMetric
-from monai.data import decollate_batch
+from monai.data import Dataset, decollate_batch
 from monai.transforms import Compose, LoadImage, Resize, NormalizeIntensity, RandRotate90, ToTensor, Activations, AsDiscrete
 from monai.networks.nets import DenseNet121
 
-from datasets.nifti_dataset import NiftiDataset  # Make sure this file is created
 
 # Set seeds for reproducibility
 torch.manual_seed(42)
@@ -32,24 +31,30 @@ metadata = pd.read_csv(paths["metadata"])
 train_df = metadata[metadata["split"] == "train"]
 val_df = metadata[metadata["split"] == "val"]
 
-train_ids = train_df[columns["patient_id"]].tolist()
-val_ids = val_df[columns["patient_id"]].tolist()
-
-# Create label mapping dictionary
 labels_dict = dict(zip(metadata[columns["patient_id"]], metadata[columns["diagnosis"]]))
+
+# Build MONAI-friendly data dicts
+train_data = [
+    {"img": os.path.join(paths["nifti_root"], "train", f"{pid}.nii.gz"), "label": labels_dict[pid]}
+    for pid in train_df[columns["patient_id"]]
+]
+val_data = [
+    {"img": os.path.join(paths["nifti_root"], "val", f"{pid}.nii.gz"), "label": labels_dict[pid]}
+    for pid in val_df[columns["patient_id"]]
+]
 
 # Define transforms
 transforms = Compose([
-    LoadImage(image_only=True, ensure_channel_first=True),  # Load as [1, D, H, W]
+    LoadImage(image_only=True, ensure_channel_first=True),  # [1, D, H, W]
     Resize((64, 128, 128)),
     NormalizeIntensity(nonzero=True),
     RandRotate90(prob=0.5, spatial_axes=[0, 2]),
     ToTensor()
 ])
 
-# Datasets and loaders
-train_ds = NiftiDataset(train_ids, labels_dict, os.path.join(paths["nifti_root"], "train"), transform=transforms)
-val_ds = NiftiDataset(val_ids, labels_dict, os.path.join(paths["nifti_root"], "val"), transform=transforms)
+# Create MONAI Datasets and loaders
+train_ds = Dataset(data=train_data, transform=transforms)
+val_ds = Dataset(data=val_data, transform=transforms)
 
 train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=2)
 val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=False, num_workers=2)
@@ -75,7 +80,7 @@ auc_metric = ROCAUCMetric()
 post_pred = Activations(softmax=True)
 post_label = AsDiscrete(to_onehot=2)
 
-val_interval = 1  # 2 if want less frequent validation
+val_interval = 1
 best_metric = -1
 best_metric_epoch = -1
 
@@ -88,11 +93,10 @@ for epoch in range(training["num_epochs"]):
     step = 0
     correct, total = 0, 0
 
-    for batch_data in train_loader:
+    for batch_data in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
         step += 1
-        inputs, labels = batch_data  # tuple from NiftiDataset
-        inputs = inputs.to(device)
-        labels = labels.to(device).long()
+        inputs = batch_data["img"].to(device)
+        labels = batch_data["label"].to(device).long()
 
         optimizer.zero_grad()
         outputs = model(inputs)
@@ -101,15 +105,11 @@ for epoch in range(training["num_epochs"]):
         optimizer.step()
 
         epoch_loss += loss.item()
-
-        # Accuracy tracking (optional)
         predicted = outputs.argmax(dim=1)
         correct += (predicted == labels).sum().item()
         total += labels.size(0)
 
-        # Logging per step
         writer.add_scalar("Loss/train_step", loss.item(), epoch * len(train_loader) + step)
-        print(f"Step {step}/{len(train_loader)}, Loss: {loss.item():.4f}")
 
     avg_loss = epoch_loss / step
     train_acc = correct / total if total > 0 else 0
@@ -118,25 +118,23 @@ for epoch in range(training["num_epochs"]):
     writer.add_scalar("Loss/train_epoch", avg_loss, epoch + 1)
     writer.add_scalar("Accuracy/train", train_acc, epoch + 1)
 
-    # Validation (every `val_interval` epochs)
+    # Validation
     if (epoch + 1) % val_interval == 0:
         model.eval()
         y_pred = torch.tensor([], dtype=torch.float32, device=device)
         y = torch.tensor([], dtype=torch.long, device=device)
 
         with torch.no_grad():
-            for x, labels in val_loader:
-                x = x.to(device)
-                labels = labels.to(device)
+            for batch in val_loader:
+                x = batch["img"].to(device)
+                labels = batch["label"].to(device)
                 outputs = model(x)
 
                 y_pred = torch.cat([y_pred, outputs], dim=0)
                 y = torch.cat([y, labels], dim=0)
 
-        # Accuracy
         acc = (y_pred.argmax(dim=1) == y).sum().item() / len(y)
 
-        # AUC
         y_onehot = [post_label(i) for i in decollate_batch(y)]
         y_pred_act = [post_pred(i) for i in decollate_batch(y_pred)]
         auc_metric(y_pred_act, y_onehot)
@@ -145,11 +143,9 @@ for epoch in range(training["num_epochs"]):
 
         print(f"[Epoch {epoch+1}] Val Accuracy: {acc:.4f} | AUC: {auc:.4f}")
 
-        # TensorBoard
         writer.add_scalar("Accuracy/val", acc, epoch+1)
         writer.add_scalar("AUC/val", auc, epoch+1)
 
-        # Save best model
         if acc > best_metric:
             best_metric = acc
             best_metric_epoch = epoch + 1
@@ -157,10 +153,6 @@ for epoch in range(training["num_epochs"]):
             print("Saved new best model")
 
 print(f"Training completed. Best accuracy: {best_metric:.4f} at epoch {best_metric_epoch}")
-
-# Save model
 torch.save(model.state_dict(), paths["model_output"])
 print(f"Model saved to: {paths['model_output']}")
-
-# Close TensorBoard writer
 writer.close()
