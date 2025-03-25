@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from monai.metrics import ROCAUCMetric
 from monai.data import Dataset, decollate_batch
-from monai.transforms import Compose, LoadImage, Resize, NormalizeIntensity, RandRotate90, ToTensor, Activations, AsDiscrete
+from monai.transforms import Compose, LoadImaged, ResizeD, NormalizeIntensityd, RandRotate90d, ToTensord, Activations, AsDiscrete, LambdaD
 from monai.networks.nets import DenseNet121
 
 
@@ -16,7 +16,7 @@ from monai.networks.nets import DenseNet121
 torch.manual_seed(42)
 
 # Load config
-with open("classifier/config.yaml", "r") as f:
+with open("config/classifier/classifier_train.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 paths = config["paths"]
@@ -45,11 +45,12 @@ val_data = [
 
 # Define transforms
 transforms = Compose([
-    LoadImage(image_only=True, ensure_channel_first=True),  # [1, D, H, W]
-    Resize((64, 128, 128)),
-    NormalizeIntensity(nonzero=True),
-    RandRotate90(prob=0.5, spatial_axes=[0, 2]),
-    ToTensor()
+    LoadImaged(keys=["img"], ensure_channel_first=True),
+    LambdaD(keys=["img"], func=lambda x: x.permute(0, 3, 1, 2)),  # → [1, D, H, W]
+    ResizeD(keys=["img"], spatial_size=(64, 128, 128)),
+    NormalizeIntensityd(keys=["img"], nonzero=True),
+    #RandRotate90d(keys=["img"], prob=0.5, spatial_axes=[1, 3]),  # rotate D and W
+    ToTensord(keys=["img", "label"])
 ])
 
 # Create MONAI Datasets and loaders
@@ -153,6 +154,8 @@ for epoch in range(training["num_epochs"]):
             print("Saved new best model")
 
 print(f"Training completed. Best accuracy: {best_metric:.4f} at epoch {best_metric_epoch}")
+
 torch.save(model.state_dict(), paths["model_output"])
 print(f"Model saved to: {paths['model_output']}")
+
 writer.close()
