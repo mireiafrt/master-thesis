@@ -32,6 +32,7 @@ train_df = metadata[metadata["split"] == "train"]
 val_df = metadata[metadata["split"] == "val"]
 
 labels_dict = dict(zip(metadata[columns["patient_id"]], metadata[columns["diagnosis"]]))
+print('metadata loaded')
 
 # Build MONAI-friendly data dicts
 train_data = [
@@ -74,6 +75,7 @@ val_ds = Dataset(data=val_data, transform=val_transforms)
 
 train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=2, pin_memory=pin_memory)
 val_loader = DataLoader(val_ds, batch_size=training["batch_size"], num_workers=2, pin_memory=pin_memory)
+print('traind and val data loaded')
 
 # Device setup
 if torch.cuda.is_available():
@@ -89,7 +91,7 @@ else:
 # Model, loss, optimizer
 model = DenseNet121(spatial_dims=3, in_channels=1, out_channels=2).to(device)
 loss_fn = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
+optimizer = torch.optim.Adam(model.parameters(), lr=float(training["learning_rate"]))
 
 # Metrics
 auc_metric = ROCAUCMetric()
