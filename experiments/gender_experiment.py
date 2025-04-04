@@ -53,16 +53,18 @@ val_B = pd.concat([
 val_B_ids = set(val_B[columns["patient_id"]])
 
 # Final exclusion set for training (test + val)
-exclude_ids = test_ids.union(val_A_ids).union(val_B_ids)
+exclude_ids_A = test_ids.union(val_A_ids)
+exclude_ids_B = test_ids.union(val_B_ids)
 
 # Train sets can overlap with each other but not with val/test
-train_males = males[~males[columns["patient_id"]].isin(exclude_ids)]
-train_females = females[~females[columns["patient_id"]].isin(exclude_ids)]
+train_males_A = males[~males[columns["patient_id"]].isin(exclude_ids_A)]
+train_males_B = males[~males[columns["patient_id"]].isin(exclude_ids_B)]
+train_females_B = females[~females[columns["patient_id"]].isin(exclude_ids_B)]
 
-train_A = train_males.sample(n=N_TRAIN, random_state=4)
+train_A = train_males_A.sample(n=N_TRAIN, random_state=4)
 train_B = pd.concat([
-    train_males.sample(n=N_TRAIN // 2, random_state=5),
-    train_females.sample(n=N_TRAIN // 2, random_state=6)
+    train_males_B.sample(n=N_TRAIN // 2, random_state=5),
+    train_females_B.sample(n=N_TRAIN // 2, random_state=6)
 ])
 
 print("Set splits completed")
