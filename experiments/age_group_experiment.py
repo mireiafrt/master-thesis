@@ -24,7 +24,7 @@ with open(yaml_path, "r") as f:
     config = yaml.safe_load(f)
 
 # Config
-paths = {"metadata":"data/metadata.csv", "nifti_files":"data/nifti"}
+paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti"}
 columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", "gender": "Patient Sex"}
 training = {"batch_size": 4, "num_epochs": 40, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
             "N_train":15, "N_val":5, "N_test":20, "age_group": "40-60"}
@@ -36,8 +36,10 @@ age_group_to_evaluate = training["age_group"]  # example: "40–60"
 
 # ============== CREATE SPLITS IN MEMORY ==============
 metadata = pd.read_csv(paths["metadata"])
-metadata["filepath"] = metadata[columns["patient_id"]].apply(lambda pid: os.path.join(paths["nifti_files"], f"{pid}.nii.gz"))
-
+metadata["filepath"] = metadata.apply(
+    lambda row: os.path.join(paths["nifti_files"], row["split"], f"{row[columns['patient_id']]}.nii.gz"),
+    axis=1
+)
 age_groups = metadata["age_group"].unique()
 current_group_df = metadata[metadata["age_group"] == age_group_to_evaluate].copy()
 other_groups_df = metadata[metadata["age_group"] != age_group_to_evaluate].copy()
