@@ -11,6 +11,7 @@ from monai.data import Dataset, decollate_batch
 from monai.transforms import Compose, LoadImaged, Resized, ScaleIntensityd, RandRotate90d, ToTensord, Activations, AsDiscrete, LambdaD
 from monai.networks.nets import DenseNet121
 from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.model_selection import train_test_split
 import random
 
 # ============== SETUP ==============
@@ -25,7 +26,7 @@ with open(yaml_path, "r") as f:
 
 # Config
 paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti"}
-columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", "gender": "Patient Sex"}
+columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", "gender": "Patient Sex", "age_group":"age_group"}
 training = {"batch_size": 4, "num_epochs": 40, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
             "N_train":15, "N_val":5, "N_test":20, "age_group": "40-60"}
 
@@ -41,54 +42,64 @@ metadata["filepath"] = metadata.apply(
     axis=1
 )
 age_groups = metadata["age_group"].unique()
-current_group_df = metadata[metadata["age_group"] == age_group_to_evaluate].copy()
-other_groups_df = metadata[metadata["age_group"] != age_group_to_evaluate].copy()
+current_group = metadata[metadata["age_group"] == age_group_to_evaluate].copy()
+other_groups = metadata[metadata["age_group"] != age_group_to_evaluate].copy()
 
 N_TRAIN = training["N_train"]
 N_VAL = training["N_val"]
 N_TEST = training["N_test"]
 
-# Sample TEST set
-test_set = current_group_df.sample(n=N_TEST, random_state=7)
-test_ids = set(test_set[columns["patient_id"]])
-# Remove test IDs
-current_group_wo_test = current_group_df[~current_group_df[columns["patient_id"]].isin(test_ids)]
+# --- Stratified test split from current age group only
+remaining_current_group, test_set = train_test_split(current_group,
+    test_size=N_TEST,
+    stratify=current_group[columns["diagnosis"]],
+    random_state=42
+)
 
-# Sample VAL sets
-val_A = current_group_wo_test.sample(n=N_VAL, random_state=1)
-val_A_ids = set(val_A[columns["patient_id"]])
-# Balanced VAL B (include from all age groups)
-val_B_parts = []
-val_B_ids = set()
-for i, grp in enumerate(age_groups):
-    group_data = metadata[(metadata["age_group"] == grp) & (~metadata[columns["patient_id"]].isin(test_ids.union(val_A_ids)))]
-    if len(group_data) == 0:
-        continue
-    max_sample = N_VAL // len(age_groups)
-    if len(group_data) > max_sample:
-        sample_n = max_sample
-    else:
-        sample_n = max(1, round(0.2 * len(group_data)))
-    sampled = group_data.sample(n=sample_n, random_state=3 + i)
-    val_B_parts.append(sampled)
-    val_B_ids.update(sampled[columns["patient_id"]])
-val_B = pd.concat(val_B_parts)
+# --- Stratified VAL_A and train_A from current age group only
+train_A, val_A = train_test_split(remaining_current_group,
+    train_size=N_TRAIN,
+    test_size=N_VAL,
+    stratify=remaining_current_group[columns["diagnosis"]],
+    random_state=1
+)
 
-# Exclude val and test for training
-exclude_ids_A = test_ids.union(val_A_ids)
-exclude_ids_B = test_ids.union(val_B_ids)
+# --- Stratified VAL_B and train_B from each group age all together
+train_B_parts, val_B_parts = [], []
+# hardcoded sizes so that it matches total n_train and n_val
+train_parts = {'Under 20': 2, '20-40': 4, '40-60': 3, '60-80': 3, 'Over 80': 3}
+val_parts = {'Under 20': 1, '20-40': 1, '40-60': 1, '60-80': 1, 'Over 80': 1}
 
-# Train A (current group only)
-train_A_candidates = current_group_df[~current_group_df[columns["patient_id"]].isin(exclude_ids_A)]
-train_A = train_A_candidates.sample(n=N_TRAIN, random_state=4)
+for grp in age_groups:
+    group_data = metadata[
+        (metadata[columns["age_group"]] == grp) &
+        (~metadata[columns["patient_id"]].isin(test_set[columns["patient_id"]]))
+    ]
 
-# Balanced Train B (equal samples from all groups)
-train_B_parts = []
-for i, grp in enumerate(age_groups):
-    group_data = metadata[(metadata["age_group"] == grp) & (~metadata[columns["patient_id"]].isin(exclude_ids_B))]
-    sample_n = min(N_TRAIN // len(age_groups), len(group_data))
-    train_B_parts.append(group_data.sample(n=sample_n, random_state=10 + i))
+    # using hard coded sizes pre-calculated to re-distribute when one group lacks amount of data
+    n_train_part = train_parts[grp]
+    n_val_part = val_parts[grp]
+
+    # try to do stratified sampling, if error dont do stratified (not enough samples of class to stratify)
+    try:
+        train_grp, val_grp = train_test_split(group_data,
+            train_size=n_train_part,
+            test_size=n_val_part,
+            stratify=group_data[columns["diagnosis"]],
+            random_state=7
+        )
+    except ValueError:
+        train_grp, val_grp = train_test_split(group_data,
+            train_size=n_train_part,
+            test_size=n_val_part,
+            random_state=7
+        )
+
+    train_B_parts.append(train_grp)
+    val_B_parts.append(val_grp)
+
 train_B = pd.concat(train_B_parts)
+val_B = pd.concat(val_B_parts)
 
 print("Set splits completed")
 
