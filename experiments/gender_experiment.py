@@ -25,7 +25,7 @@ N_TEST = training["N_test"]
 
 # ============== SETUP LOGGING ==============
 os.makedirs("logs", exist_ok=True)
-csv_columns = ["seed", "model", "val_f1", "val_acc", "val_auc", "val_recall", "val_precision",
+csv_columns = ["seed", "model", "train_loss", "val_f1", "val_acc", "val_auc", "val_recall", "val_precision",
     "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"
 ]
 log_file_exists = os.path.exists(paths["log_csv"])
@@ -54,7 +54,7 @@ def get_transform_eval():
         Resized(keys=["img"], spatial_size=tuple(training["resize"]))
     ])
 
-def train_and_val(train_df, val_df, seed):
+def train_and_val(train_df, val_df, seed, model_name):
     # Set seeds for reproducibility
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -77,7 +77,8 @@ def train_and_val(train_df, val_df, seed):
 
     for epoch in range(training["num_epochs"]):
         model.train()
-        for batch in train_loader:
+        epoch_loss = 0
+        for batch in tqdm(train_loader, desc=f"[{model_name}] Epoch {epoch+1}"):
             inputs = batch["img"].to(device)
             labels = batch["label"].to(device).long()
             optimizer.zero_grad()
@@ -85,6 +86,8 @@ def train_and_val(train_df, val_df, seed):
             loss = loss_fn(outputs, labels)
             loss.backward()
             optimizer.step()
+            epoch_loss += loss.item()
+        print(f"[{model_name}] Epoch {epoch+1}: Train Loss={epoch_loss:.4f}")
 
         # Validation
         model.eval()
@@ -102,12 +105,14 @@ def train_and_val(train_df, val_df, seed):
         auc = roc_auc_score(val_labels, val_preds) if len(set(val_labels)) == 2 else 0.0
         recall = recall_score(val_labels, val_preds)
         precision = precision_score(val_labels, val_preds)
+        print(f"[{model_name}] Epoch {epoch+1}: Acc={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}")
 
         if f1 > best_f1 or (f1 == best_f1 and auc > best_auc):
             best_f1 = f1
             best_auc = auc
             best_state_dict = model.state_dict()
             best_metrics = {
+                "train_loss": epoch_loss,
                 "val_f1": f1,
                 "val_acc": acc,
                 "val_auc": auc,
@@ -115,11 +120,12 @@ def train_and_val(train_df, val_df, seed):
                 "val_precision": precision
             }
 
+    print(f"[{model_name}] Best F1: {best_f1:.4f}, AUC: {best_auc:.4f}")
     # Restore best weights before returning
     model.load_state_dict(best_state_dict)
     return best_metrics, model
 
-def evaluate_on_test(model, test_df):
+def evaluate_on_test(model, test_df, model_name):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     model.eval()
@@ -141,6 +147,7 @@ def evaluate_on_test(model, test_df):
     auc = roc_auc_score(y_true, y_pred) if len(set(y_true)) == 2 else 0.0
     recall = recall_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred)
+    print(f"[TEST {model_name}] Accuracy: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
 
     return {
         "test_f1": f1,
@@ -181,12 +188,12 @@ for seed in range(training["n_experiments"]):
     val_B = pd.concat([val_males_B, val_females_B])
 
     # Train and Evaluate Model A
-    metrics_A_train, model_A = train_and_val(train_A, val_A, seed)
-    metrics_A_test = evaluate_on_test(model_A, test_set)
+    metrics_A_train, model_A = train_and_val(train_A, val_A, seed, "model A")
+    metrics_A_test = evaluate_on_test(model_A, test_set, "model A")
 
     # Train and Evaluate Model B
-    metrics_B_train, model_B = train_and_val(train_B, val_B, seed)
-    metrics_B_test = evaluate_on_test(model_B, test_set)
+    metrics_B_train, model_B = train_and_val(train_B, val_B, seed, "model B")
+    metrics_B_test = evaluate_on_test(model_B, test_set, "model A")
 
     # Log results
     writer.writerow({"seed": seed, "model": "A", **metrics_A_train, **metrics_A_test})
