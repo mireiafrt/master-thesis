@@ -63,8 +63,7 @@ train_females_B, val_females_B = train_test_split(females,
     random_state=2
 )
 # --- Stratified half male sample for VAL_B and TRAIN_B
-train_males_B, val_males_B = train_test_split(
-    remaining_males,
+train_males_B, val_males_B = train_test_split(remaining_males,
     train_size=N_TRAIN // 2,
     test_size=N_VAL // 2,
     stratify=remaining_males[columns["diagnosis"]],
