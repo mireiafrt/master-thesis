@@ -193,7 +193,7 @@ for seed in range(training["n_experiments"]):
 
     # Train and Evaluate Model B
     metrics_B_train, model_B = train_and_val(train_B, val_B, seed, "model B")
-    metrics_B_test = evaluate_on_test(model_B, test_set, "model A")
+    metrics_B_test = evaluate_on_test(model_B, test_set, "model B")
 
     # Log results
     writer.writerow({"seed": seed, "model": "A", **metrics_A_train, **metrics_A_test})
