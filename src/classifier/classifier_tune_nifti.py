@@ -4,6 +4,7 @@ import itertools
 import torch
 import numpy as np
 import pandas as pd
+import csv
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from monai.metrics import ROCAUCMetric
@@ -13,7 +14,7 @@ from monai.transforms import (
     RandRotate90d, Activations, AsDiscrete, LambdaD
 )
 from monai.networks.nets import DenseNet121
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, roc_auc_score
 
 # Load config
 with open("config/classifier/classifier_tune.yaml", "r") as f:
@@ -41,16 +42,15 @@ val_data_base = [
     for pid in val_df[columns["patient_id"]]
 ]
 
-# Define tuning grid
-resize_opts = param_grid["resize"]
-rotate_probs = param_grid["rotation_prob"]
-batch_sizes = param_grid["batch_size"]
-learning_rates = param_grid["learning_rate"]
-num_workers_opts = param_grid["num_workers"]
-num_epochs_opts = param_grid["num_epochs"]
+# Predefine CSV columns
+max_epochs = max(param_grid["num_epochs"])
+static_fields = ["run_id", "resize", "batch_size", "learning_rate", "rotation_prob", "num_workers", "num_epochs"]
+epoch_metrics = ["train_loss", "train_acc", "train_f1", "train_auc", "val_acc", "val_f1", "val_auc"]
+csv_fieldnames = static_fields + [f"epoch_{e}_{m}" for e in range(max_epochs) for m in epoch_metrics]
+log_csv = paths["csv_log_output"]
 
-# Track best result
-best_result = {"f1": -1, "auc": -1, "config": None, "state_dict": None, "epoch": -1}
+# Best overall result
+best_result = {"f1": -1, "auc": -1, "acc": -1, "config": None, "state_dict": None, "epoch": -1}
 
 def get_transforms(resize_size, rotate_prob):
     train_tf = Compose([
@@ -71,10 +71,22 @@ def get_transforms(resize_size, rotate_prob):
 # Tuning loop
 run_id = 0
 for resize, rotate, bs, lr, nw, epochs in itertools.product(
-    resize_opts, rotate_probs, batch_sizes, learning_rates, num_workers_opts, num_epochs_opts
+    param_grid["resize"], param_grid["rotation_prob"], param_grid["batch_size"],
+    param_grid["learning_rate"], param_grid["num_workers"], param_grid["num_epochs"]
 ):
     run_id += 1
     print(f"\n===== Run {run_id}: resize={resize}, rotate={rotate}, batch_size={bs}, lr={lr}, num_workers={nw}, epochs={epochs} =====")
+
+    run_log = {k: None for k in csv_fieldnames}
+    run_log.update({
+        "run_id": run_id,
+        "resize": resize,
+        "batch_size": bs,
+        "learning_rate": lr,
+        "rotation_prob": rotate,
+        "num_workers": nw,
+        "num_epochs": epochs,
+    })
 
     train_tf, val_tf = get_transforms(resize, rotate)
 
@@ -91,12 +103,18 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
 
     best_f1 = -1
     best_auc = -1
+    best_acc = -1
     best_epoch = -1
     best_state_dict = None
-    best_acc = -1
 
     for epoch in range(epochs):
         model.train()
+        epoch_loss = 0
+        correct = 0
+        total = 0
+        all_train_preds = []
+        all_train_labels = []
+
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}"):
             inputs = batch["img"].to(device)
             labels = batch["label"].to(device).long()
@@ -105,6 +123,19 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
             loss = loss_fn(outputs, labels)
             loss.backward()
             optimizer.step()
+
+            epoch_loss += loss.item()
+            preds = outputs.argmax(dim=1)
+            correct += (preds == labels).sum().item()
+            total += labels.size(0)
+
+            all_train_preds.extend(preds.cpu().numpy())
+            all_train_labels.extend(labels.cpu().numpy())
+
+        train_acc = correct / total
+        train_loss = epoch_loss / len(train_loader)
+        train_f1 = f1_score(all_train_labels, all_train_preds)
+        train_auc = roc_auc_score(all_train_labels, all_train_preds) if len(set(all_train_labels)) == 2 else 0.0
 
         # Validation
         model.eval()
@@ -128,6 +159,15 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
         auc = auc_metric.aggregate().item()
         auc_metric.reset()
 
+        # Save results of epoch for csv log
+        run_log[f"epoch_{epoch}_train_loss"] = train_loss
+        run_log[f"epoch_{epoch}_train_acc"] = train_acc
+        run_log[f"epoch_{epoch}_train_f1"] = train_f1
+        run_log[f"epoch_{epoch}_train_auc"] = train_auc
+        run_log[f"epoch_{epoch}_val_acc"] = acc
+        run_log[f"epoch_{epoch}_val_f1"] = f1
+        run_log[f"epoch_{epoch}_val_auc"] = auc
+
         if f1 > best_f1 or (f1 == best_f1 and auc > best_auc):
             best_f1 = f1
             best_auc = auc
@@ -135,7 +175,6 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
             best_epoch = epoch
             best_state_dict = model.state_dict()
 
-    # Save if best model overall so far
     if best_f1 > best_result["f1"] or (best_f1 == best_result["f1"] and best_auc > best_result["auc"]):
         best_result.update({
             "f1": best_f1,
@@ -167,4 +206,16 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
 
         print(f"New best model saved: Epoch {best_epoch} | F1: {best_f1:.4f} | AUC: {best_auc:.4f} | ACC: {best_acc:.4f}")
 
-print("Tuning complete")
+    # Save run results to csv
+    os.makedirs(os.path.dirname(log_csv), exist_ok=True)
+    file_exists = os.path.isfile(log_csv)
+    with open(log_csv, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(run_log)
+
+print("Tuning complete.")
+print(f"Best model found: Epoch {best_result['epoch']} | F1: {best_result['f1']:.4f} | AUC: {best_result['auc']:.4f} | ACC: {best_result['acc']:.4f}")
+print(f"Model saved to: {out_model_path}")
+print(f"Config saved to: {out_config_path}")
