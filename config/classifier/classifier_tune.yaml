@@ -3,6 +3,7 @@ paths:
   nifti_root: "data/preprocessed_nifti"
   best_model_output: "models/classifier/best_tuned_model.pth"
   best_config_output: "config/classifier/results_tuned_model.yaml"
+  csv_log_output: "logs/tune_logs.csv"
 
 columns:
   patient_id: "Patient ID"
