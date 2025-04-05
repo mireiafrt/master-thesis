@@ -2,7 +2,7 @@ paths:
   metadata: "data/metadata.csv"
   nifti_root: "data/preprocessed_nifti"
   best_model_output: "models/classifier/best_tuned_model.pth"
-  best_config_output: "config/classifier/classifier_tuned.yaml"
+  best_config_output: "config/classifier/results_tuned_model.yaml"
 
 columns:
   patient_id: "Patient ID"
