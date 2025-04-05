@@ -153,8 +153,9 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
         print(f"New best model found! Accuracy: {best_acc:.4f}, AUC: {best_auc:.4f}, Epoch: {best_epoch}")
 
 # Final save of best model and config
+os.makedirs(os.path.dirname(out_model_path), exist_ok=True)
 torch.save(best_result["state_dict"], out_model_path)
+
+os.makedirs(os.path.dirname(out_config_path), exist_ok=True)
 with open(out_config_path, "w") as f:
     yaml.dump(best_result["config"], f)
-
-print("Tuning complete! Best model saved.")
