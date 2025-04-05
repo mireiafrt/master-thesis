@@ -92,7 +92,7 @@ def train_and_val(train_df, val_df, seed):
         with torch.no_grad():
             for batch in val_loader:
                 x = batch["img"].to(device)
-                labels = batch["label"].to(device)
+                labels = batch["label"].to(device).long()
                 outputs = model(x)
                 val_preds.extend(outputs.argmax(dim=1).cpu().numpy())
                 val_labels.extend(labels.cpu().numpy())
@@ -131,7 +131,7 @@ def evaluate_on_test(model, test_df):
     with torch.no_grad():
         for batch in test_loader:
             inputs = batch["img"].to(device)
-            labels = batch["label"].to(device)
+            labels = batch["label"].to(device).long()
             outputs = model(inputs)
             y_pred.extend(outputs.argmax(dim=1).cpu().numpy())
             y_true.extend(labels.cpu().numpy())
@@ -160,7 +160,7 @@ males = metadata[metadata[columns["gender"]] == "M"]
 females = metadata[metadata[columns["gender"]] == "F"]
 
 for seed in range(training["n_experiments"]):
-    print(f"\n=== Seed {seed} ===")
+    print(f"\n========= Seed {seed} =========")
 
     # Test set (males only)
     remaining_males, test_set = train_test_split(males, test_size=N_TEST, stratify=males[columns["diagnosis"]], random_state=seed)
@@ -181,11 +181,11 @@ for seed in range(training["n_experiments"]):
     val_B = pd.concat([val_males_B, val_females_B])
 
     # Train and Evaluate Model A
-    metrics_A_train, model_A = train_and_val(train_A, val_A, seed, "Model_A")
+    metrics_A_train, model_A = train_and_val(train_A, val_A, seed)
     metrics_A_test = evaluate_on_test(model_A, test_set)
 
     # Train and Evaluate Model B
-    metrics_B_train, model_B = train_and_val(train_B, val_B, seed, "Model_B")
+    metrics_B_train, model_B = train_and_val(train_B, val_B, seed)
     metrics_B_test = evaluate_on_test(model_B, test_set)
 
     # Log results
