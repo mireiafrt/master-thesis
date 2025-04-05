@@ -100,11 +100,11 @@ def train_and_val(train_df, val_df, seed, model_name):
                 val_preds.extend(outputs.argmax(dim=1).cpu().numpy())
                 val_labels.extend(labels.cpu().numpy())
 
-        f1 = f1_score(val_labels, val_preds)
+        f1 = f1_score(val_labels, val_preds, zero_division=0)
         acc = accuracy_score(val_labels, val_preds)
         auc = roc_auc_score(val_labels, val_preds) if len(set(val_labels)) == 2 else 0.0
-        recall = recall_score(val_labels, val_preds)
-        precision = precision_score(val_labels, val_preds)
+        recall = recall_score(val_labels, val_preds, zero_division=0)
+        precision = precision_score(val_labels, val_preds, zero_division=0)
         print(f"[{model_name}] Epoch {epoch+1}: Acc={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}")
 
         if f1 > best_f1 or (f1 == best_f1 and auc > best_auc):
@@ -142,11 +142,11 @@ def evaluate_on_test(model, test_df, model_name):
             y_pred.extend(outputs.argmax(dim=1).cpu().numpy())
             y_true.extend(labels.cpu().numpy())
 
-    f1 = f1_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred, zero_division=0)
     acc = np.mean(np.array(y_pred) == np.array(y_true))
     auc = roc_auc_score(y_true, y_pred) if len(set(y_true)) == 2 else 0.0
-    recall = recall_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred)
+    recall = recall_score(y_true, y_pred, zero_division=0)
+    precision = precision_score(y_true, y_pred, zero_division=0)
     print(f"[TEST {model_name}] Accuracy: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
 
     return {
