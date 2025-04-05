@@ -11,6 +11,7 @@ from monai.data import Dataset, decollate_batch
 from monai.transforms import Compose, LoadImaged, Resized, ScaleIntensityd, RandRotate90d, ToTensord, Activations, AsDiscrete, LambdaD
 from monai.networks.nets import DenseNet121
 from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 import random
 
 # ============== SETUP ==============
@@ -24,7 +25,9 @@ columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", 
 training = {"batch_size": 4, "num_epochs": 40, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
             "N_train":30, "N_val":6, "N_test":30}
 
-# ============== CREATE SPLITS IN MEMORY ==============
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
+
+# ============== CREATE SPLITS IN MEMORY (UPDATED) ==============
 metadata = pd.read_csv(paths["metadata"])
 metadata["filepath"] = metadata.apply(
     lambda row: os.path.join(paths["nifti_files"], row["split"], f"{row[columns['patient_id']]}.nii.gz"),
@@ -37,40 +40,41 @@ N_TRAIN = training["N_train"]
 N_VAL = training["N_val"]
 N_TEST = training["N_test"]
 
-# Sample TEST set
-test_set = males.sample(n=N_TEST, random_state=7)
-test_ids = set(test_set[columns["patient_id"]])
+# --- Stratified test split from males only
+remaining_males, test_set = train_test_split(males,
+    test_size=N_TEST,
+    stratify=males[columns["diagnosis"]],
+    random_state=7
+)
 
-# Remove test IDs from males and females that have been used in test
-males_wo_test = males[~males[columns["patient_id"]].isin(test_ids)]
-females_wo_test = females.copy()  # females not in test set by design
+# --- Stratified VAL_A and train_A from remaining males
+train_A, val_A = train_test_split(remaining_males,
+    train_size=N_TRAIN,
+    test_size=N_VAL,
+    stratify=remaining_males[columns["diagnosis"]],
+    random_state=1
+)
 
-# Sample VAL sets (A is all male, B is 50-50 males-females)
-val_A = males_wo_test.sample(n=N_VAL, random_state=1)
-val_A_ids = set(val_A[columns["patient_id"]])
+# --- Stratified half female sample for VAL_B and TRAIN_B
+train_females_B, val_females_B = train_test_split(females,
+    train_size=N_TRAIN // 2,
+    test_size=N_VAL // 2,
+    stratify=females[columns["diagnosis"]],
+    random_state=2
+)
+# --- Stratified half male sample for VAL_B and TRAIN_B
+train_males_B, val_males_B = train_test_split(
+    remaining_males,
+    train_size=N_TRAIN // 2,
+    test_size=N_VAL // 2,
+    stratify=remaining_males[columns["diagnosis"]],
+    random_state=3
+)
+# Final balanced splits
+val_B = pd.concat([val_males_B, val_females_B])
+train_B = pd.concat([train_males_B, train_females_B])
 
-val_B = pd.concat([
-    males_wo_test.sample(n=N_VAL // 2, random_state=2),
-    females_wo_test.sample(n=N_VAL // 2, random_state=3)
-])
-val_B_ids = set(val_B[columns["patient_id"]])
-
-# Final exclusion set for training (test + val)
-exclude_ids_A = test_ids.union(val_A_ids)
-exclude_ids_B = test_ids.union(val_B_ids)
-
-# Train sets can overlap with each other but not with val/test
-train_males_A = males[~males[columns["patient_id"]].isin(exclude_ids_A)]
-train_males_B = males[~males[columns["patient_id"]].isin(exclude_ids_B)]
-train_females_B = females[~females[columns["patient_id"]].isin(exclude_ids_B)]
-
-train_A = train_males_A.sample(n=N_TRAIN, random_state=4)
-train_B = pd.concat([
-    train_males_B.sample(n=N_TRAIN // 2, random_state=5),
-    train_females_B.sample(n=N_TRAIN // 2, random_state=6)
-])
-
-print("Set splits completed")
+print("Stratified splits completed")
 
 # ============== FUNCTION TO BUILD DATASET ==============
 def build_monai_data(df):
@@ -187,8 +191,8 @@ def train_and_eval(model_name, train_data, val_data):
 
 # ============== RUN EXPERIMENTS ==============
 print("Evaluating for gender")
-model_A_path = train_and_eval("model_A_male_only", train_A, val_A)
-model_B_path = train_and_eval("model_B_balanced", train_B, val_B)
+#model_A_path = train_and_eval("model_A_male_only", train_A, val_A)
+#model_B_path = train_and_eval("model_B_balanced", train_B, val_B)
 
-evaluate_on_test(model_A_path, "Model A (Male Only)")
-evaluate_on_test(model_B_path, "Model B (Balanced)")
+#evaluate_on_test(model_A_path, "Model A (Male Only)")
+#evaluate_on_test(model_B_path, "Model B (Balanced)")
