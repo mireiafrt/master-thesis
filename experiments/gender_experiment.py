@@ -16,7 +16,7 @@ import random
 # ============== SETUP CONFIG ==============
 paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti", "log_csv":"logs/gender_experiment_results.csv"}
 columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", "gender": "Patient Sex"}
-training = {"batch_size": 4, "num_epochs": 40, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
+training = {"batch_size": 4, "num_epochs": 20, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
             "N_train":30, "N_val":6, "N_test":30, "n_experiments": 10}
 
 N_TRAIN = training["N_train"]
