@@ -1,9 +1,7 @@
 import os
 import yaml
-import json
 import itertools
 import torch
-import shutil
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -12,9 +10,10 @@ from monai.metrics import ROCAUCMetric
 from monai.data import Dataset, decollate_batch
 from monai.transforms import (
     Compose, LoadImaged, Resized, ScaleIntensityd,
-    RandRotate90d, ToTensord, Activations, AsDiscrete, LambdaD
+    RandRotate90d, Activations, AsDiscrete, LambdaD
 )
 from monai.networks.nets import DenseNet121
+from sklearn.metrics import f1_score
 
 # Load config
 with open("config/classifier/classifier_tune.yaml", "r") as f:
@@ -51,7 +50,7 @@ num_workers_opts = param_grid["num_workers"]
 num_epochs_opts = param_grid["num_epochs"]
 
 # Track best result
-best_result = {"acc": -1, "auc": -1, "config": None, "state_dict": None, "epoch": -1}
+best_result = {"f1": -1, "auc": -1, "config": None, "state_dict": None, "epoch": -1}
 
 def get_transforms(resize_size, rotate_prob):
     train_tf = Compose([
@@ -90,10 +89,11 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
     loss_fn = torch.nn.CrossEntropyLoss()
     auc_metric = ROCAUCMetric()
 
-    best_acc = -1
+    best_f1 = -1
     best_auc = -1
     best_epoch = -1
     best_state_dict = None
+    best_acc = -1
 
     for epoch in range(epochs):
         model.train()
@@ -119,21 +119,26 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
                 y = torch.cat([y, labels], dim=0)
 
         acc = (y_pred.argmax(dim=1) == y).sum().item() / len(y)
+        y_np = y.cpu().numpy()
+        y_pred_np = y_pred.argmax(dim=1).cpu().numpy()
+        f1 = f1_score(y_np, y_pred_np)
         y_pred_act = Activations(softmax=True)(y_pred)
         y_onehot = [AsDiscrete(to_onehot=2)(i) for i in decollate_batch(y, detach=False)]
         auc_metric(y_pred_act, y_onehot)
         auc = auc_metric.aggregate().item()
         auc_metric.reset()
 
-        if acc > best_acc or (acc == best_acc and auc > best_auc):
-            best_acc = acc
+        if f1 > best_f1 or (f1 == best_f1 and auc > best_auc):
+            best_f1 = f1
             best_auc = auc
-            best_epoch = epoch + 1
+            best_acc = acc
+            best_epoch = epoch
             best_state_dict = model.state_dict()
 
-    # Save if best overall
-    if best_acc > best_result["acc"] or (best_acc == best_result["acc"] and best_auc > best_result["auc"]):
+    # Save if best model overall so far
+    if best_f1 > best_result["f1"] or (best_f1 == best_result["f1"] and best_auc > best_result["auc"]):
         best_result.update({
+            "f1": best_f1,
             "acc": best_acc,
             "auc": best_auc,
             "epoch": best_epoch,
@@ -145,17 +150,21 @@ for resize, rotate, bs, lr, nw, epochs in itertools.product(
                 "num_workers": nw,
                 "num_epochs": epochs,
                 "best_epoch": best_epoch,
+                "val_f1": best_f1,
                 "val_accuracy": best_acc,
                 "val_auc": best_auc
             },
             "state_dict": best_state_dict
         })
-        print(f"New best model found! Accuracy: {best_acc:.4f}, AUC: {best_auc:.4f}, Epoch: {best_epoch}")
 
-# Final save of best model and config
-os.makedirs(os.path.dirname(out_model_path), exist_ok=True)
-torch.save(best_result["state_dict"], out_model_path)
+        # Save best model and config incrementally
+        os.makedirs(os.path.dirname(out_model_path), exist_ok=True)
+        torch.save(best_state_dict, out_model_path)
 
-os.makedirs(os.path.dirname(out_config_path), exist_ok=True)
-with open(out_config_path, "w") as f:
-    yaml.dump(best_result["config"], f)
+        os.makedirs(os.path.dirname(out_config_path), exist_ok=True)
+        with open(out_config_path, "w") as f:
+            yaml.dump(best_result["config"], f)
+
+        print(f"New best model saved: Epoch {best_epoch} | F1: {best_f1:.4f} | AUC: {best_auc:.4f} | ACC: {best_acc:.4f}")
+
+print("Tuning complete")
