@@ -90,6 +90,8 @@ for i, grp in enumerate(age_groups):
     train_B_parts.append(group_data.sample(n=sample_n, random_state=10 + i))
 train_B = pd.concat(train_B_parts)
 
+print("Set splits completed")
+
 # ============== FUNCTION TO BUILD DATASET ==============
 def build_monai_data(df):
     return [{"img": row["filepath"], "label": int(row[columns["diagnosis"]])} for _, row in df.iterrows()]

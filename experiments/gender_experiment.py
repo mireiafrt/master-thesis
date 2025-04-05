@@ -186,6 +186,7 @@ def train_and_eval(model_name, train_data, val_data):
     return best_model_path
 
 # ============== RUN EXPERIMENTS ==============
+print("Evaluating for gender")
 model_A_path = train_and_eval("model_A_male_only", train_A, val_A)
 model_B_path = train_and_eval("model_B_balanced", train_B, val_B)
 
