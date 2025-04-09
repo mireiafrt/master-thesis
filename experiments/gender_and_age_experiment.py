@@ -169,8 +169,8 @@ metadata["combined_group"] = metadata[columns["gender"]] + "-" + metadata[column
 target_group = f"{training['gender']}-{training['age_group']}"
 combined_groups = metadata["combined_group"].unique()
 
-current_group = metadata[metadata["combined_groups"] == target_group].copy()
-other_groups = metadata[metadata["combined_groups"] != target_group].copy()
+current_group = metadata[metadata["combined_group"] == target_group].copy()
+other_groups = metadata[metadata["combined_group"] != target_group].copy()
 
 for seed in range(training["n_experiments"]):
     print(f"\n========= Seed {seed} =========")
