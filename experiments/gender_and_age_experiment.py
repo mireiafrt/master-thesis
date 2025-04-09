@@ -242,8 +242,8 @@ for seed in range(training["n_experiments"]):
         train_B_parts.append(train_grp)
         val_B_parts.append(val_grp)
 
-    train_B = pd.concat(train_B_parts)
-    val_B = pd.concat(val_B_parts)
+    val_B = pd.concat([df for df in val_B_parts if not df.empty], ignore_index=True)
+    train_B = pd.concat([df for df in train_B_parts if not df.empty], ignore_index=True)
 
     # Train and Evaluate Model A
     metrics_A_train, model_A = train_and_val(train_A, val_A, seed, "model A")
