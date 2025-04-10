@@ -1,9 +1,10 @@
 paths:
-  model: "classifier/densenet_model.pth"
+  model: "models/classifier/best_tuned_model.pth"
   metadata: "data/metadata.csv"
-  nifti_test: "data/preprocessed_nifti/test"
-  pred_output: "data/predictions.csv"
+  nifti_files: "data/preprocessed_nifti/test"
+  pred_output: "data/predictions_test.csv"
 
 columns:
   patient_id: "Patient ID"
   diagnosis: "binary_diagnosis_patient"
+  split: "test"
