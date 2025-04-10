@@ -1,0 +1,13 @@
+batch_size: 2
+best_epoch: 16
+learning_rate: 0.0001
+num_epochs: 40
+num_workers: 0
+resize:
+- 96
+- 96
+- 96
+rotation_prob: 0.0
+val_accuracy: 0.8461538461538461
+val_auc: 0.75
+val_f1: 0.8888888888888888
