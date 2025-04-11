@@ -83,7 +83,7 @@ transforms = Compose([
     LoadImaged(keys=["img"], ensure_channel_first=True),
     LambdaD(keys=["img"], func=lambda x: x.permute(0, 3, 1, 2)),  # [1, D, H, W]
     ScaleIntensityd(keys=["img"]),
-    Resized(keys=["img"], spatial_size=(96, 96, 96)),
+    Resized(keys=["img"], spatial_size=(128, 128, 128)),
 ])
 post_pred = Compose([Activations(softmax=True)])
 post_label = Compose([AsDiscrete(to_onehot=2)])
