@@ -14,10 +14,10 @@ import csv
 import random
 
 # ============== SETUP CONFIG ==============
-paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti", "log_csv":"logs/gender_age_experiment_results_40_60_M.csv"}
+paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti", "log_csv":"logs/gender_age_experiment_results_60_80_F.csv"}
 columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", "gender": "Patient Sex", "age_group":"age_group"}
 training = {"batch_size": 2, "num_epochs": 20, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
-            "N_train":10, "N_val":3, "N_test":6, "n_experiments": 20, "age_group": "40-60", "gender":"M"}
+            "N_train":10, "N_val":3, "N_test":6, "n_experiments": 20, "age_group": "60-80", "gender":"F"}
 
 N_TRAIN = training["N_train"]
 N_VAL = training["N_val"]

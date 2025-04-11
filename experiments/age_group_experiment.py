@@ -14,10 +14,10 @@ import csv
 import random
 
 # ============== SETUP CONFIG ==============
-paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti", "log_csv":"logs/age_experiment_results.csv"}
+paths = {"metadata":"data/metadata.csv", "nifti_files":"data/preprocessed_nifti", "log_csv":"logs/age_experiment_results_40_60.csv"}
 columns = {"patient_id": "Patient ID", "diagnosis": "binary_diagnosis_patient", "gender": "Patient Sex", "age_group":"age_group"}
-training = {"batch_size": 4, "num_epochs": 20, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
-            "N_train":15, "N_val":5, "N_test":20, "age_group": "40-60", "n_experiments": 10}
+training = {"batch_size": 4, "num_epochs": 40, "learning_rate": 0.0001, "resize": [128, 128, 128], "rotation_prob": 0.5,
+            "N_train":15, "N_val":5, "N_test":20, "age_group": "40-60", "n_experiments": 20}
 
 # for 40-60, 60-80 i can use: "N_train":15, "N_val":5, "N_test":20
 # if want to evaluate on equal ground also 20-40, idk what to do to include all groups
