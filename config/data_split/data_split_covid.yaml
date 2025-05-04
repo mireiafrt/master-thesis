@@ -1,0 +1,59 @@
+data_paths:
+  metadata_path: '/home/coder/project/covidxct/slice_level_metadata.csv'
+  output_path: '/home/coder/project/covidxct/proc_slices_metadata.csv'
+
+stratify_columns: ['sex', 'age_group']
+
+groups_to_reduce:
+  - sex: "M"
+    age_group: "60-80"
+    label: 1
+    drop_fraction: 0.60
+
+  - sex: "F"
+    age_group: "60-80"
+    label: 1
+    drop_fraction: 0.50
+
+  - sex: "M"
+    age_group: "40-60"
+    label: 1
+    drop_fraction: 0.55
+
+  - sex: "F"
+    age_group: "40-60"
+    label: 1
+    drop_fraction: 0.50
+
+  - sex: "M"
+    age_group: "Over 80"
+    label: 1
+    drop_fraction: 0.30
+
+  - sex: "F"
+    age_group: "Over 80"
+    label: 1
+    drop_fraction: 0.30
+
+  - sex: "M"
+    age_group: "20-40"
+    label: 1
+    drop_fraction: 0.30
+
+  - sex: "F"
+    age_group: "20-40"
+    label: 1
+    drop_fraction: 0.30
+
+
+split_percentages:
+  gt_split:
+    train_size: 0.44
+    test_size: 0.56
+  test_split:
+    train_size: 0.55
+    test_size: 0.45
+  train_split:
+    train_size: 0.75
+    test_size: 0.25
+
