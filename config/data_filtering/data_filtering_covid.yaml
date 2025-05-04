@@ -1,0 +1,10 @@
+data_paths:
+  metadata_csv: '/home/coder/project/covidxct/metadata.csv'
+  image_folder: '/home/coder/project/covidxct/3A_images'
+  result_csv: '/home/coder/project/covidxct/slice_level_metadata.csv'
+
+filtering:
+  keep_pneumonia: False
+
+
+
