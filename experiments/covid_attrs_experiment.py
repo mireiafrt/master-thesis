@@ -213,7 +213,7 @@ def evaluate_on_test(best_model_state, test_df):
     auc = auc_metric.aggregate().item()
     f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
 
-    print(f"TEST Accuracy: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
+    print(f"TEST ACC: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}, REC: {recall:4.f}, PREC: {precision:4.f}")
 
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
 
@@ -237,7 +237,6 @@ with open(log_path, "w", newline="") as f:
 
         if best_model_state is not None:
             test_metrics = evaluate_on_test(best_model_state, test_df)
-            print(f"Test Metrics: {test_metrics}")
             # save results
             writer.writerow({"seed": seed, **train_metrics, **test_metrics})
         else:
