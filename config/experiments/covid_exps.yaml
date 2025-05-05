@@ -5,12 +5,12 @@ paths:
   image_column: "image_path"
 
 labeling:
-  attribute_columns: ["sex"]  # ["sex"] or ["age_group"], or ["sex", "age_group"]
+  attribute_columns: ["age_group"]  # ["sex"] or ["age_group"], or ["sex", "age_group"]
   normalize_labels: True  # whether to encode string labels to integers
 
 training:
   num_runs: 1 #10
-  num_epochs: 3 #20
+  num_epochs: 3 #20 or 10
   batch_size: 2 #32
   learning_rate: 0.001
   val_interval: 1

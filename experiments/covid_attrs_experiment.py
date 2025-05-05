@@ -233,7 +233,7 @@ def evaluate_on_test(best_model_state, test_df):
 # DEBUG check (should be placed outside the loop)
 if DEBUG:
     print("[DEBUG MODE] Sampling small subset of the data for quick run...")
-    df, _ = train_test_split(df, train_size=200, stratify=df["label"], random_state=100)
+    df, _ = train_test_split(df, train_size=300, stratify=df["label"], random_state=100)
     df = df.reset_index(drop=True)
 
 for seed in range(training["num_runs"]):
