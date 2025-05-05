@@ -6,11 +6,11 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score, accuracy_score, roc_auc_score, recall_score, precision_score
 from monai.data import Dataset, decollate_batch
-from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeIntensityd, RandGaussianSmoothd, RandFlipd, RandAffined, Resized, LambdaD
+from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeIntensityd, RandGaussianSmoothd, RandFlipd, RandAffined, Resized, LambdaD, Activations, AsDiscrete
 from monai.losses import FocalLoss
 from monai.networks.nets import DenseNet121
+from monai.metrics import ROCAUCMetric
 from torch.utils.data import DataLoader
 import random
 import csv
@@ -45,6 +45,7 @@ else:
 if normalize_labels:
     df["label"] = df["label"].astype("category").cat.codes
 label_map = dict(enumerate(df["label"].astype("category").cat.categories))
+num_classes = len(label_map)
 
 # ========== Helper Functions ==========
 def build_monai_data(df_subset):
@@ -56,21 +57,20 @@ def get_train_transform():
         LoadImaged(keys=["img"], ensure_channel_first=True),
         # Scale pixel intensities to [0, 1] range (from raw intensity range)
         ScaleIntensityd(keys=["img"]),
-        # Convert single-channel grayscale image [1, H, W] to 3-channel by duplicating it
-        LambdaD(keys=["img"], func=lambda x: np.repeat(x, 3, axis=0)),
-        # Normalize using ImageNet mean and std for each channel
+        LambdaD(keys=["img"], func=lambda x: x.repeat(3, 1, 1)),
         NormalizeIntensityd(keys=["img"],
             subtrahend=torch.tensor([0.485, 0.456, 0.406]),  # ImageNet means (R, G, B)
-            divisor=torch.tensor([0.229, 0.224, 0.225])      # ImageNet stds (R, G, B)
+            divisor=torch.tensor([0.229, 0.224, 0.225]),      # ImageNet stds (R, G, B)
+            channel_wise=True
         ),
         # Apply Gaussian smoothing with 50% probability to slightly blur the image
         RandGaussianSmoothd(keys=["img"], prob=0.5),
         # Random horizontal flip (axis=2) with 50% probability to augment left-right symmetry
-        RandFlipd(keys=["img"], prob=0.5, spatial_axis=2),
+        RandFlipd(keys=["img"], prob=0.5, spatial_axis=-1),
         # Random mild affine rotation on the 2D plane (max ~5.7°), preserves shape with border padding
         RandAffined(keys=["img"], prob=0.5,
-            rotate_range=(0.0, 0.0, 0.1),  # Only rotate around z-axis (axial plane)
-            padding_mode="border"         # Fill empty pixels after rotation with border values
+            rotate_range=(0.0, 0.0, 0.1),
+            padding_mode="border"
         ),
         # Resize the final image to 256x256 as expected by ImageNet-pretrained models
         Resized(keys=["img"], spatial_size=(256, 256)),
@@ -80,8 +80,8 @@ def get_eval_transform():
     return Compose([
         LoadImaged(keys=["img"], ensure_channel_first=True),
         ScaleIntensityd(keys=["img"]),
-        LambdaD(keys=["img"], func=lambda x: np.repeat(x, 3, axis=0)),
-        NormalizeIntensityd(keys=["img"], subtrahend=torch.tensor([0.485, 0.456, 0.406]), divisor=torch.tensor([0.229, 0.224, 0.225])),
+        LambdaD(keys=["img"], func=lambda x: x.repeat(3, 1, 1)),
+        NormalizeIntensityd(keys=["img"], subtrahend=torch.tensor([0.485, 0.456, 0.406]), divisor=torch.tensor([0.229, 0.224, 0.225]), channel_wise=True),
         Resized(keys=["img"], spatial_size=(256, 256)),
     ])
 
@@ -93,11 +93,16 @@ def train_model(train_df, val_df, seed):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using CUDA: {torch.cuda.is_available()}")
     # use pretrained ImageNet weights
-    model = DenseNet121(spatial_dims=2, in_channels=3, out_channels=len(label_map), pretrained=True).to(device)
+    model = DenseNet121(spatial_dims=2, in_channels=3, out_channels=num_classes, pretrained=True).to(device)
 
     loss_fn = FocalLoss(to_onehot_y=True, use_softmax=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+
+    auc_metric = ROCAUCMetric(average="macro")
+    confusion_metric = ConfusionMatrixMetric(metric_name=["f1 score", "accuracy", "recall", "precision"], include_background=True)
+    post_pred = Activations(softmax=True)
+    post_label = AsDiscrete(to_onehot=num_classes)
 
     train_ds = Dataset(data=build_monai_data(train_df), transform=get_train_transform())
     val_ds = Dataset(data=build_monai_data(val_df), transform=get_eval_transform())
@@ -123,21 +128,24 @@ def train_model(train_df, val_df, seed):
             total_loss += loss.item()
         print(f"Epoch {epoch+1}: Train Loss={total_loss:.4f}")
 
-        # Evaluate (validation)
+        # Validation
         model.eval()
-        y_true, y_pred = [], []
+        y_pred, y_true = [], []
         with torch.no_grad():
             for batch in val_loader:
                 x, y = batch["img"].to(device), batch["label"].to(device).long()
                 outputs = model(x)
-                y_pred.extend(outputs.argmax(dim=1).cpu().numpy())
-                y_true.extend(y.cpu().numpy())
+                y_pred.extend(decollate_batch(post_pred(outputs)))
+                y_true.extend(decollate_batch(post_label(y)))
 
-        f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
-        acc = accuracy_score(y_true, y_pred)
-        recall = recall_score(y_true, y_pred, average='macro', zero_division=0)
-        precision = precision_score(y_true, y_pred, average='macro', zero_division=0)
-        auc = roc_auc_score(pd.get_dummies(y_true), pd.get_dummies(y_pred), average='macro') if len(label_map) == 2 else 0.0
+        auc_metric.reset()
+        confusion_metric.reset()
+        auc_metric(y_pred, y_true)
+        confusion_metric(y_pred, y_true)
+
+        auc = auc_metric.aggregate().item()
+        f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
+
         print(f"Epoch {epoch+1}: Acc={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
 
         scheduler.step(1 - f1)
@@ -154,7 +162,6 @@ def train_model(train_df, val_df, seed):
                 best_model_state = model.state_dict()
 
     print(f"Best F1: {best_f1:.4f}, AUC: {best_auc:.4f}")
-
     return best_metrics, best_model_state
 
 def evaluate_on_test(model, test_df):
@@ -165,20 +172,28 @@ def evaluate_on_test(model, test_df):
     test_ds = Dataset(data=build_monai_data(test_df), transform=get_eval_transform())
     test_loader = DataLoader(test_ds, batch_size=1, num_workers=2)
 
+    post_pred = Activations(softmax=True)
+    post_label = AsDiscrete(to_onehot=num_classes)
+    auc_metric = ROCAUCMetric(average="macro")
+    confusion_metric = ConfusionMatrixMetric(metric_name=["f1 score", "accuracy", "recall", "precision"], include_background=True)
+
     y_pred, y_true = [], []
     with torch.no_grad():
         for batch in test_loader:
             inputs = batch["img"].to(device)
             labels = batch["label"].to(device).long()
             outputs = model(inputs)
-            y_pred.extend(outputs.argmax(dim=1).cpu().numpy())
-            y_true.extend(labels.cpu().numpy())
+            y_pred.extend(decollate_batch(post_pred(outputs)))
+            y_true.extend(decollate_batch(post_label(labels)))
 
-    f1 = f1_score(y_true, y_pred, zero_division=0)
-    acc = np.mean(np.array(y_pred) == np.array(y_true))
-    auc = roc_auc_score(y_true, y_pred) if len(set(y_true)) == 2 else 0.0
-    recall = recall_score(y_true, y_pred, zero_division=0)
-    precision = precision_score(y_true, y_pred, zero_division=0)
+    auc_metric.reset()
+    confusion_metric.reset()
+    auc_metric(y_pred, y_true)
+    
+    confusion_metric(y_pred, y_true)
+    auc = auc_metric.aggregate().item()
+    f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
+
     print(f"TEST Accuracy: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
 
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
@@ -186,7 +201,7 @@ def evaluate_on_test(model, test_df):
 # ========== Run Experiments ==========
 with open(log_path, "w", newline="") as f:
     csv_col_names = ["seed", "train_loss", "f1", "acc", "recall", "precision", "auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
-    writer = writer = csv.DictWriter(f, fieldnames=csv_col_names)
+    writer = csv.DictWriter(f, fieldnames=csv_col_names)
     writer.writeheader()
 
     for seed in range(training["num_runs"]):
@@ -205,6 +220,5 @@ with open(log_path, "w", newline="") as f:
         else:
             # just save train results
             writer.writerow({"seed": seed, **train_metrics})
-
 
 print("\nAll runs completed and logged.")
