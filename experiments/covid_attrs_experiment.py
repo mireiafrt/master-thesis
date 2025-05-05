@@ -10,7 +10,8 @@ from monai.data import Dataset, decollate_batch
 from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeIntensityd, RandGaussianSmoothd, RandFlipd, RandAffined, Resized, LambdaD, Activations, AsDiscrete
 from monai.losses import FocalLoss
 from monai.networks.nets import DenseNet121
-from monai.metrics import ROCAUCMetric, ConfusionMatrixMetric
+from monai.metrics import ROCAUCMetric
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.utils.data import DataLoader
 import random
 import csv
@@ -28,9 +29,18 @@ training = config["training"]
 split = config["split"]
 output = config["output"]
 
+# ============== SETUP LOGGING ==============
 os.makedirs(output["results_dir"], exist_ok=True)
+csv_columns = ["seed", "train_loss", "f1", "acc", "recall", "precision", "auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
+
 label_name = label_cols[0] if len(label_cols) == 1 else "_".join(label_cols)
 log_path = os.path.join(output["results_dir"], f"experiment_{label_name}.csv")
+log_file_exists = os.path.exists(log_path)
+
+log_f = open(log_path, "a", newline="")
+writer = csv.DictWriter(log_f, fieldnames=csv_columns)
+if not log_file_exists:
+    writer.writeheader()
 
 # ========== Load and preprocess data ==========
 print("Reading metadata ...")
@@ -102,7 +112,6 @@ def train_model(train_df, val_df, seed):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
     auc_metric = ROCAUCMetric(average="macro")
-    confusion_metric = ConfusionMatrixMetric(metric_name=["f1 score", "accuracy", "recall", "precision"], include_background=True)
     post_pred = Compose([Activations(softmax=True)])
     post_label = Compose([AsDiscrete(to_onehot=num_classes)])
     post_discrete = AsDiscrete(argmax=True, to_onehot=num_classes)
@@ -147,14 +156,16 @@ def train_model(train_df, val_df, seed):
         y_pred_probs = post_pred(y_pred) # no need to decollate here
         y_true = [post_label(i) for i in decollate_batch(y, detach=False)]
         y_pred_bin = [post_discrete(i) for i in decollate_batch(y_pred_probs, detach=False)]
+        y_pred_classes = torch.stack([p.argmax(dim=0) for p in y_pred_bin]).cpu().numpy()
+        y_true_classes = torch.stack([t.argmax(dim=0) for t in y_true]).cpu().numpy()
 
         auc_metric.reset()
-        confusion_metric.reset()
         auc_metric(y_pred_probs, y_true)
-        confusion_metric(y_pred_bin, y_true)
-
         auc = auc_metric.aggregate().item()
-        f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
+        acc = accuracy_score(y_true_classes, y_pred_classes)
+        f1 = f1_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+        recall = recall_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+        precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
 
         print(f"Epoch {epoch+1} VAL: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
 
@@ -188,7 +199,6 @@ def evaluate_on_test(best_model_state, test_df):
     post_label = AsDiscrete(to_onehot=num_classes)
     post_discrete = AsDiscrete(argmax=True, to_onehot=num_classes)
     auc_metric = ROCAUCMetric(average="macro")
-    confusion_metric = ConfusionMatrixMetric(metric_name=["f1 score", "accuracy", "recall", "precision"], include_background=True)
 
     y_pred = torch.tensor([], dtype=torch.float32, device=device)
     y = torch.tensor([], dtype=torch.long, device=device)
@@ -204,16 +214,18 @@ def evaluate_on_test(best_model_state, test_df):
     y_pred_probs = post_pred(y_pred) # no need to decollate here
     y_true = [post_label(i) for i in decollate_batch(y, detach=False)]
     y_pred_bin = [post_discrete(i) for i in decollate_batch(y_pred_probs, detach=False)]
+    y_pred_classes = torch.stack([p.argmax(dim=0) for p in y_pred_bin]).cpu().numpy()
+    y_true_classes = torch.stack([t.argmax(dim=0) for t in y_true]).cpu().numpy()
 
     auc_metric.reset()
-    confusion_metric.reset()
     auc_metric(y_pred_probs, y_true)
-    confusion_metric(y_pred_bin, y_true)
-
     auc = auc_metric.aggregate().item()
-    f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
+    acc = accuracy_score(y_true_classes, y_pred_classes)
+    f1 = f1_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+    recall = recall_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+    precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
 
-    print(f"TEST ACC: {acc:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}, REC: {recall:4.f}, PREC: {precision:4.f}")
+    print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
 
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
 
@@ -221,26 +233,24 @@ def evaluate_on_test(best_model_state, test_df):
 # DEBUG check (should be placed outside the loop)
 if DEBUG:
     print("[DEBUG MODE] Sampling small subset of the data for quick run...")
-    df = df.sample(n=100, random_state=42).reset_index(drop=True)
+    df, _ = train_test_split(df, train_size=200, stratify=df["label"], random_state=100)
+    df = df.reset_index(drop=True)
 
-with open(log_path, "w", newline="") as f:
-    csv_col_names = ["seed", "train_loss", "f1", "acc", "recall", "precision", "auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
-    writer = csv.DictWriter(f, fieldnames=csv_col_names)
-    writer.writeheader()
+for seed in range(training["num_runs"]):
+    print(f"\n=== Experiment {seed} ===")
+    train_df, temp_df = train_test_split(df, train_size=split["train_size"], stratify=df["label"], random_state=seed)
+    val_df, test_df = train_test_split(temp_df, test_size=split["test_size"] / (split["test_size"] + split["val_size"]), stratify=temp_df["label"], random_state=seed)
 
-    for seed in range(training["num_runs"]):
-        print(f"\n=== Experiment {seed} ===")
-        train_df, temp_df = train_test_split(df, train_size=split["train_size"], stratify=df["label"], random_state=seed)
-        val_df, test_df = train_test_split(temp_df, test_size=split["test_size"] / (split["test_size"] + split["val_size"]), stratify=temp_df["label"], random_state=seed)
+    train_metrics, best_model_state = train_model(train_df, val_df, seed)
 
-        train_metrics, best_model_state = train_model(train_df, val_df, seed)
+    if best_model_state is not None:
+        test_metrics = evaluate_on_test(best_model_state, test_df)
+        # save results
+        writer.writerow({"seed": seed, **train_metrics, **test_metrics})
+    else:
+        # just save train results
+        writer.writerow({"seed": seed, **train_metrics})
+    log_f.flush()
 
-        if best_model_state is not None:
-            test_metrics = evaluate_on_test(best_model_state, test_df)
-            # save results
-            writer.writerow({"seed": seed, **train_metrics, **test_metrics})
-        else:
-            # just save train results
-            writer.writerow({"seed": seed, **train_metrics})
-
+log_f.close()
 print("\nAll runs completed and logged.")
