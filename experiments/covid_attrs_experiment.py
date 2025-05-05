@@ -10,7 +10,7 @@ from monai.data import Dataset, decollate_batch
 from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeIntensityd, RandGaussianSmoothd, RandFlipd, RandAffined, Resized, LambdaD, Activations, AsDiscrete
 from monai.losses import FocalLoss
 from monai.networks.nets import DenseNet121
-from monai.metrics import ROCAUCMetric
+from monai.metrics import ROCAUCMetric, ConfusionMatrixMetric
 from torch.utils.data import DataLoader
 import random
 import csv
@@ -18,7 +18,8 @@ import csv
 # ========== Load Config ==========
 with open("config/experiments/covid_exps.yaml", "r") as f:
     config = yaml.safe_load(f)
-
+    
+DEBUG = config["DEBUG"]
 metadata_path = config["paths"]["metadata_csv"]
 image_col = config["paths"]["image_column"]
 label_cols = config["labeling"]["attribute_columns"]
@@ -34,6 +35,7 @@ log_path = os.path.join(output["results_dir"], f"experiment_{label_name}.csv")
 # ========== Load and preprocess data ==========
 print("Reading metadata ...")
 df = pd.read_csv(metadata_path)
+print(f"Running experiment on: {label_cols}")
 
 # Combine label columns if more than one attribute
 if len(label_cols) == 1:
@@ -101,8 +103,9 @@ def train_model(train_df, val_df, seed):
 
     auc_metric = ROCAUCMetric(average="macro")
     confusion_metric = ConfusionMatrixMetric(metric_name=["f1 score", "accuracy", "recall", "precision"], include_background=True)
-    post_pred = Activations(softmax=True)
-    post_label = AsDiscrete(to_onehot=num_classes)
+    post_pred = Compose([Activations(softmax=True)])
+    post_label = Compose([AsDiscrete(to_onehot=num_classes)])
+    post_discrete = AsDiscrete(argmax=True, to_onehot=num_classes)
 
     train_ds = Dataset(data=build_monai_data(train_df), transform=get_train_transform())
     val_ds = Dataset(data=build_monai_data(val_df), transform=get_eval_transform())
@@ -130,18 +133,25 @@ def train_model(train_df, val_df, seed):
 
         # Validation
         model.eval()
-        y_pred, y_true = [], []
+        y_pred = torch.tensor([], dtype=torch.float32, device=device)
+        y = torch.tensor([], dtype=torch.long, device=device)
         with torch.no_grad():
             for batch in val_loader:
-                x, y = batch["img"].to(device), batch["label"].to(device).long()
+                x = batch["img"].to(device)
+                labels = batch["label"].to(device)
                 outputs = model(x)
-                y_pred.extend(decollate_batch(post_pred(outputs)))
-                y_true.extend(decollate_batch(post_label(y)))
+                y_pred = torch.cat([y_pred, outputs], dim=0)
+                y = torch.cat([y, labels], dim=0)
+
+        # Post-processing directly on the full batch
+        y_pred_probs = post_pred(y_pred) # no need to decollate here
+        y_true = [post_label(i) for i in decollate_batch(y, detach=False)]
+        y_pred_bin = [post_discrete(i) for i in decollate_batch(y_pred_probs, detach=False)]
 
         auc_metric.reset()
         confusion_metric.reset()
-        auc_metric(y_pred, y_true)
-        confusion_metric(y_pred, y_true)
+        auc_metric(y_pred_probs, y_true)
+        confusion_metric(y_pred_bin, y_true)
 
         auc = auc_metric.aggregate().item()
         f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
@@ -164,9 +174,11 @@ def train_model(train_df, val_df, seed):
     print(f"Best F1: {best_f1:.4f}, AUC: {best_auc:.4f}")
     return best_metrics, best_model_state
 
-def evaluate_on_test(model, test_df):
+def evaluate_on_test(best_model_state, test_df):
+    print("Evaluating on TEST ...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+    model = DenseNet121(spatial_dims=2, in_channels=3, out_channels=num_classes, pretrained=True).to(device)
+    model.load_state_dict(best_model_state)
     model.eval()
 
     test_ds = Dataset(data=build_monai_data(test_df), transform=get_eval_transform())
@@ -174,23 +186,30 @@ def evaluate_on_test(model, test_df):
 
     post_pred = Activations(softmax=True)
     post_label = AsDiscrete(to_onehot=num_classes)
+    post_discrete = AsDiscrete(argmax=True, to_onehot=num_classes)
     auc_metric = ROCAUCMetric(average="macro")
     confusion_metric = ConfusionMatrixMetric(metric_name=["f1 score", "accuracy", "recall", "precision"], include_background=True)
 
-    y_pred, y_true = [], []
+    y_pred = torch.tensor([], dtype=torch.float32, device=device)
+    y = torch.tensor([], dtype=torch.long, device=device)
     with torch.no_grad():
         for batch in test_loader:
-            inputs = batch["img"].to(device)
-            labels = batch["label"].to(device).long()
-            outputs = model(inputs)
-            y_pred.extend(decollate_batch(post_pred(outputs)))
-            y_true.extend(decollate_batch(post_label(labels)))
+            x = batch["img"].to(device)
+            labels = batch["label"].to(device)
+            outputs = model(x)
+            y_pred = torch.cat([y_pred, outputs], dim=0)
+            y = torch.cat([y, labels], dim=0)
+
+    # Post-processing directly on the full batch
+    y_pred_probs = post_pred(y_pred) # no need to decollate here
+    y_true = [post_label(i) for i in decollate_batch(y, detach=False)]
+    y_pred_bin = [post_discrete(i) for i in decollate_batch(y_pred_probs, detach=False)]
 
     auc_metric.reset()
     confusion_metric.reset()
-    auc_metric(y_pred, y_true)
-    
-    confusion_metric(y_pred, y_true)
+    auc_metric(y_pred_probs, y_true)
+    confusion_metric(y_pred_bin, y_true)
+
     auc = auc_metric.aggregate().item()
     f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
 
@@ -199,6 +218,11 @@ def evaluate_on_test(model, test_df):
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
 
 # ========== Run Experiments ==========
+# DEBUG check (should be placed outside the loop)
+if DEBUG:
+    print("[DEBUG MODE] Sampling small subset of the data for quick run...")
+    df = df.sample(n=100, random_state=42).reset_index(drop=True)
+
 with open(log_path, "w", newline="") as f:
     csv_col_names = ["seed", "train_loss", "f1", "acc", "recall", "precision", "auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
     writer = csv.DictWriter(f, fieldnames=csv_col_names)
@@ -209,14 +233,13 @@ with open(log_path, "w", newline="") as f:
         train_df, temp_df = train_test_split(df, train_size=split["train_size"], stratify=df["label"], random_state=seed)
         val_df, test_df = train_test_split(temp_df, test_size=split["test_size"] / (split["test_size"] + split["val_size"]), stratify=temp_df["label"], random_state=seed)
 
-        train_metrics, model = train_model(train_df, val_df, seed)
+        train_metrics, best_model_state = train_model(train_df, val_df, seed)
 
-        if model is not None:
-            test_metrics = evaluate_on_test(model, test_df)
+        if best_model_state is not None:
+            test_metrics = evaluate_on_test(best_model_state, test_df)
             print(f"Test Metrics: {test_metrics}")
             # save results
             writer.writerow({"seed": seed, **train_metrics, **test_metrics})
-        
         else:
             # just save train results
             writer.writerow({"seed": seed, **train_metrics})
