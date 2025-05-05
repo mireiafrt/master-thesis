@@ -156,7 +156,7 @@ def train_model(train_df, val_df, seed):
         auc = auc_metric.aggregate().item()
         f1, acc, recall, precision = [m.item() for m in confusion_metric.aggregate()]
 
-        print(f"Epoch {epoch+1}: Acc={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
+        print(f"Epoch {epoch+1} VAL: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
 
         scheduler.step(1 - f1)
 
