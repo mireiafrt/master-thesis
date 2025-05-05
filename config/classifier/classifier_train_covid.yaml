@@ -1,0 +1,19 @@
+DEBUG: True
+
+paths:
+  metadata_csv: "/home/coder/project/covidxct/proc_slices_metaata.csv"
+  model_output: models/classifier/covid_densenet_model.pth
+  results_dir: "results/covid_experiments"
+
+columns:
+  label: "label"
+  image_column: "image_path"
+  split_col: "split"
+
+training:
+  num_runs: 1 #10
+  num_epochs: 3 #20
+  batch_size: 2 #32
+  learning_rate: 0.001
+  val_interval: 1
+
