@@ -1,0 +1,9 @@
+paths:
+  model: "models/classifier/covid_densenet_model.pth"
+  metadata: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  pred_output: "results/covid_pred_test.csv"
+
+columns:
+  label: "label"
+  image_path: "image_path"
+  split: "test"
