@@ -16,6 +16,8 @@ from monai.transforms import (
     RandFlipd, RandAffined, Resized, LambdaD, Activations, AsDiscrete
 )
 
+torch.manual_seed(42)
+
 # Load static config data
 with open("config/classifier/classifier_train_covid.yaml", "r") as f:
     base_config = yaml.safe_load(f)
