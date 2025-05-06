@@ -156,6 +156,11 @@ def objective(trial):
             best_f1 = f1
             best_model_state = model.state_dict()
 
+        # Check if the trial should be pruned
+        trial.report(f1, epoch)
+        if trial.should_prune():
+            raise optuna.exceptions.TrialPruned()
+
     # Save best epoch of trial only if it's the best across all trials (or first trial)
     if best_f1 > best_f1_overall:
         best_f1_overall = best_f1
@@ -169,7 +174,9 @@ def objective(trial):
 
     return best_f1
 
-study = optuna.create_study(direction="maximize")
+# Start OPTUNA
+pruner = optuna.pruners.MedianPruner(n_warmup_steps=3)
+study = optuna.create_study(direction="maximize", pruner=pruner)
 study.optimize(objective, n_trials=40)
 
 # write trials info to csv
