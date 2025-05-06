@@ -108,7 +108,10 @@ best_f1 = -1
 best_auc = -1
 best_epoch = -1
 val_interval = 1
-# save best_model_state? or just save model pth directly?
+
+# early stopping criteria
+early_stop_patience = training.get("early_stopping_patience", 5)
+epochs_since_improvement = 0
 
 for epoch in range(training["num_epochs"]):
     print("-" * 30)
@@ -165,5 +168,13 @@ for epoch in range(training["num_epochs"]):
             os.makedirs(os.path.dirname(paths["model_output"]), exist_ok=True)
             torch.save(model.state_dict(), paths["model_output"])
             print("Saved new best model")
+            epochs_since_improvement = 0  # reset
+        else:
+            epochs_since_improvement += 1
+        
+    # check if should stop training due to early stopping criteria
+    if epochs_since_improvement >= early_stop_patience:
+        print(f"Early stopping at epoch {epoch+1} due to no improvement.")
+        break
 
 print(f"Training complete. Best F1: {best_f1:.4f} and AUC: {best_auc:.4f} at Epoch {best_epoch}")
