@@ -1,0 +1,18 @@
+paths:
+  metadata: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  best_model_output: "models/classifier/covid_best_tuned_model.pth"
+  csv_log_output: "logs/tune_logs_covid.csv"
+
+columns:
+  label: "label"
+  image_path: "image_path"
+
+param_grid:
+  batch_size: [64, 128, 256]
+  learning_rate: [1e-5, 1e-4]
+  num_epochs: [10, 20, 30]
+  loss_gamma: [1.0, 2.0, 5.0]
+  loss_alpha: [0.25, 0.5, 0.75]
+  LRS_factor: [0.2, 0.5, 0.8]
+  LRS_patience: [2, 3, 5]
+  flip_prob: [0.2, 0.5, 0.8]
