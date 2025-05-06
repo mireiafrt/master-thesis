@@ -1,13 +1,13 @@
 DEBUG: True
 
 paths:
-  metadata_csv: "/home/coder/project/covidxct/proc_slices_metaata.csv"
+  metadata_csv: "/home/coder/project/covidxct/proc_slices_metadata.csv"
   model_output: models/classifier/covid_densenet_model.pth
   results_dir: "results/covid_experiments"
 
 columns:
   label: "label"
-  image_column: "image_path"
+  image_path: "image_path"
   split_col: "split"
 
 training:

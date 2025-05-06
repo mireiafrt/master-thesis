@@ -4,11 +4,11 @@ import yaml
 import torch
 import pandas as pd
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from monai.metrics import ROCAUCMetric
 from monai.data import Dataset, decollate_batch
-from monai.transforms import Compose, LoadImaged, ScaleIntensityd, RandRotateD, RandFlipd, RandGaussianSmoothd, Resized, Activations, AsDiscrete, LambdaD, NormalizeIntensityd
+from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeIntensityd, RandGaussianSmoothd, RandFlipd, RandAffined, Resized, LambdaD, Activations, AsDiscrete
 from monai.networks.nets import DenseNet121
 from monai.losses import FocalLoss
 from sklearn.metrics import f1_score, accuracy_score, recall_score, precision_score
@@ -26,12 +26,9 @@ paths = config["paths"]
 columns = config["columns"]
 training = config["training"]
 
-# TensorBoard writer
-writer = SummaryWriter(log_dir="runs/classifier_2d")
-
 # Load metadata CSV with pre-defined splits
 print("Reading metadata ...")
-metadata = pd.read_csv(paths["metadata"])
+metadata = pd.read_csv(paths["metadata_csv"])
 metadata = metadata[metadata["use"] == True]
 
 # Split according to 'split' column
@@ -40,9 +37,9 @@ val_df = metadata[metadata["split"] == "val"]
 
 if DEBUG:
     print("[DEBUG MODE] Sampling small subset of the data for quick run...")
-    train_df, _ = train_test_split(train_df, train_size=300, stratify=df["label"], random_state=100)
+    train_df, _ = train_test_split(train_df, train_size=200, stratify=train_df["label"], random_state=100)
     train_df = train_df.reset_index(drop=True)
-    val_df, _ = train_test_split(val_df, train_size=100, stratify=df["label"], random_state=100)
+    val_df, _ = train_test_split(val_df, train_size=50, stratify=val_df["label"], random_state=100)
     val_df = val_df.reset_index(drop=True)
 
 # Data dicts
@@ -85,8 +82,8 @@ val_transforms = Compose([
     Resized(keys=["img"], spatial_size=(256, 256)),
 ])
 post_pred = Compose([Activations(softmax=True)])
-post_label = Compose([AsDiscrete(to_onehot=num_classes)])
-post_discrete = Compose([AsDiscrete(argmax=True, to_onehot=num_classes)])
+post_label = Compose([AsDiscrete(to_onehot=2)])
+post_discrete = Compose([AsDiscrete(argmax=True, to_onehot=2)])
 
 # Datasets and loaders
 train_ds = Dataset(data=train_data, transform=train_transforms)
@@ -127,7 +124,6 @@ for epoch in range(training["num_epochs"]):
         optimizer.step()
         total_loss += loss.item()
     print(f"Epoch {epoch+1}: Train Loss={total_loss:.4f}")
-    writer.add_scalar(f"Epoch {epoch+1}: Train Loss={total_loss:.4f}")
 
     # Validation
     if (epoch + 1) % val_interval == 0:
@@ -159,9 +155,6 @@ for epoch in range(training["num_epochs"]):
 
         print(f"Epoch {epoch+1} VAL: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
 
-        writer.add_scalar("F1/val", f1, epoch)
-        writer.add_scalar("AUC/val", auc, epoch)
-
         scheduler.step(1 - f1)
 
         # Save best model based on F1 and break ties with AUC
@@ -174,4 +167,3 @@ for epoch in range(training["num_epochs"]):
             print("Saved new best model")
 
 print(f"Training complete. Best F1: {best_f1:.4f} and AUC: {best_auc:.4f} at Epoch {best_epoch}")
-writer.close()
