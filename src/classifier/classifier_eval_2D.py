@@ -3,7 +3,7 @@ import torch
 import yaml
 import pandas as pd
 from tqdm import tqdm
-from monai.transforms import Compose, LoadImaged, ScaleIntensityd, Resized, LambdaD, Activations, AsDiscrete
+from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeIntensityd, Resized, LambdaD, Activations, AsDiscrete
 from monai.data import Dataset, DataLoader, decollate_batch
 from monai.networks.nets import DenseNet121
 from monai.metrics import ROCAUCMetric
@@ -112,6 +112,12 @@ acc = accuracy_score(y_true_classes, y_pred_classes)
 f1 = f1_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
 recall = recall_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
 precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+cm = confusion_matrix(y_true_classes, y_pred_classes)
+
+print("\nConfusion Matrix (rows = True, columns = Predicted):")
+print(f"          Pred 0    Pred 1")
+print(f"True 0    {cm[0,0]:>6}    {cm[0,1]:>6}")
+print(f"True 1    {cm[1,0]:>6}    {cm[1,1]:>6}")
 
 print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
 
