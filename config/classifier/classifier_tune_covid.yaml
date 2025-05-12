@@ -1,7 +1,7 @@
 paths:
   metadata: "/home/coder/project/covidxct/proc_slices_metadata.csv"
   best_model_output: "models/classifier/covid_best_tuned_model.pth"
-  csv_log_output: "logs/tune_logs_covid.csv"
+  csv_log_output: "logs/tune_covid_logs.csv"
 
 columns:
   label: "label"

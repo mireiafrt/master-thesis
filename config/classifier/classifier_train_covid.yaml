@@ -1,9 +1,8 @@
-DEBUG: True
+DEBUG: False
 
 paths:
   metadata_csv: "/home/coder/project/covidxct/proc_slices_metadata.csv"
   model_output: models/classifier/covid_densenet_model.pth
-  results_dir: "results/covid_experiments"
 
 columns:
   label: "label"
@@ -12,9 +11,8 @@ columns:
 
 training:
   early_stopping_patience: 5
-  num_runs: 1 #10
-  num_epochs: 3 #20
-  batch_size: 2 #32
+  num_epochs: 20
+  batch_size: 64
   learning_rate: 0.001
   val_interval: 1
 
