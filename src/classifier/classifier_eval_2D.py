@@ -91,7 +91,7 @@ auc_metric = ROCAUCMetric(average="macro")
 y_pred = torch.tensor([], dtype=torch.float32, device=device)
 y = torch.tensor([], dtype=torch.long, device=device)
 with torch.no_grad():
-    for batch in eval_loader:
+    for batch in tqdm(eval_loader, desc="Evaluating", unit="batch"):
         x = batch["img"].to(device)
         labels = batch["label"].to(device)
         outputs = model(x)
