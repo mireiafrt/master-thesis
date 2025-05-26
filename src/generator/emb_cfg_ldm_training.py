@@ -4,7 +4,6 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import json
 
 import torch
 import torch.nn.functional as F
@@ -269,6 +268,13 @@ output_model_path = os.path.join(paths["model_output"], "generator.pth")
 torch.save(unet.state_dict(), output_model_path)
 print(f"Saved trained unet model to: {output_model_path}")
 
+# save embeddings also for later use in sampling
+torch.save({
+    "label_embed": label_embed.state_dict(),
+    "sex_embed": sex_embed.state_dict(),
+    "age_embed": age_embed.state_dict(),
+}, os.path.join(paths["model_output"], "embeddings.pth"))
+
 # Create a DataFrame to store the losses
 loss_df = pd.DataFrame({
     "epoch": list(range(0, n_epochs)),
@@ -279,9 +285,6 @@ loss_csv_path = os.path.join(paths["model_output"], "training_losses.csv")
 loss_df.to_csv(loss_csv_path, index=False)
 print(f"Saved training loss log to: {loss_csv_path}")
 
-
 # Cleanup after training
 progress_bar.close()
 torch.cuda.empty_cache()
-
-
