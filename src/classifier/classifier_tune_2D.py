@@ -19,7 +19,7 @@ from monai.transforms import (
 torch.manual_seed(42)
 
 # Load static config data
-with open("config/classifier/classifier_train_covid.yaml", "r") as f:
+with open("config/classifier/classifier_tune_covid.yaml", "r") as f:
     base_config = yaml.safe_load(f)
 paths = base_config["paths"]
 columns = base_config["columns"]
@@ -78,7 +78,8 @@ def objective(trial):
     global best_f1_overall
 
     batch_size = trial.suggest_categorical("batch_size", param_grid["batch_size"])
-    lr = trial.suggest_float("learning_rate", min(param_grid["learning_rate"]), max(param_grid["learning_rate"]), log=True)
+    lr_range = [float(x) for x in param_grid["learning_rate"]]
+    lr = trial.suggest_float("learning_rate", min(lr_range), max(lr_range), log=True)
     num_epochs = trial.suggest_categorical("num_epochs", param_grid["num_epochs"])
     gamma = trial.suggest_categorical("loss_gamma", param_grid["loss_gamma"])
     alpha = trial.suggest_categorical("loss_alpha", param_grid["loss_alpha"])
@@ -168,6 +169,7 @@ def objective(trial):
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         torch.save(best_model_state, model_path)
         trial.set_user_attr("best_model_path", model_path)
+        print("Saving new best model ...")
 
     # logging info of trial
     trial.set_user_attr("metrics", {"f1": best_f1, "accuracy": acc, "recall": recall, "precision": precision, "auc": auc})
@@ -177,7 +179,7 @@ def objective(trial):
 # Start OPTUNA
 pruner = optuna.pruners.MedianPruner(n_warmup_steps=3)
 study = optuna.create_study(direction="maximize", pruner=pruner)
-study.optimize(objective, n_trials=40)
+study.optimize(objective, n_trials=20) # try 20 configurations
 
 # write trials info to csv
 with open(csv_log_path, "a", newline="") as csvfile:
