@@ -244,6 +244,8 @@ for epoch in range(n_epochs):
         val_recon_losses.append(val_loss)
         print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
 
+print("Finished training")
+
 # === Save trained autoencoder ===
 output_model_path = os.path.join(paths["model_output"], "autoencoder.pth")
 torch.save(autoencoderkl.state_dict(), output_model_path)

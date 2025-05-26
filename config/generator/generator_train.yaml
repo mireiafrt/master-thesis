@@ -1,5 +1,6 @@
 paths:
   metadata: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  autoencoder_model: "models/generator/autoencoder/autoencoder.pth"
   model_output: "models/generator"
 
 columns:
@@ -9,7 +10,8 @@ columns:
   split_col: "split"
 
 training:
-  batch_size: 64
-  num_epochs: 100
-  val_interval: 10
-  warm_up: 10
+  emb_size: 128
+  batch_size: 128
+  num_epochs: 200
+  val_interval: 20
+  guidance_scale: 7.0
