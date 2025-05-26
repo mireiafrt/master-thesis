@@ -1,0 +1,15 @@
+paths:
+  metadata: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  model_output: "models/generator"
+
+columns:
+  label: "label"
+  attribute_cols: ["sex", "age_group"]
+  image_path: "image_path"
+  split_col: "split"
+
+training:
+  batch_size: 64
+  num_epochs: 100
+  val_interval: 10
+  warm_up: 10
