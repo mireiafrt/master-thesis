@@ -229,12 +229,15 @@ for epoch in range(n_epochs):
                 with autocast(enabled=True):
                     reconstruction, z_mu, z_sigma = autoencoderkl(images)
                     
-                    # Get the first reconstruction from the first validation batch for visualisation purposes
+                    # Get the first 2 reconstruction from the first validation batch for visualisation purposes
                     if val_step == 1:
-                        recon_sample = reconstruction[:2].detach().cpu()
+                        recon_sample = reconstruction[:2].detach().cpu()  # first 2 reconstructed images
                         for i, img in enumerate(recon_sample):
-                            plt.imsave(f"{paths['model_output']}/recon_epoch{epoch}_img{i}.png", img[0], cmap="gray", vmin=0, vmax=1)
-
+                            # img shape: [1, H, W] → [H, W]
+                            img_array = img[0] if img.shape[0] == 1 else img  # in case channel dim is present
+                            out_path = os.path.join(paths["model_output"], f"recon_epoch{epoch}_img{i}.png")
+                            plt.imsave(out_path, img_array, cmap="gray", vmin=0, vmax=1)
+                    
                     # L1 validation reconstruction loss
                     recons_loss = F.l1_loss(images.float(), reconstruction.float())
 
@@ -244,6 +247,7 @@ for epoch in range(n_epochs):
         val_recon_losses.append(val_loss)
         print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
 
+progress_bar.close()
 print("Finished training")
 
 # === Save trained autoencoder ===
@@ -264,7 +268,6 @@ loss_df.to_csv(loss_csv_path, index=False)
 print(f"Saved training loss log to: {loss_csv_path}")
 
 # Cleanup after training
-progress_bar.close()
 del discriminator
 del perceptual_loss
 torch.cuda.empty_cache()
