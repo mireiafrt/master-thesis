@@ -245,7 +245,7 @@ for epoch in range(n_epochs):
 
         val_loss /= val_step
         val_recon_losses.append(val_loss)
-        print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
+        print(f"epoch {epoch} val loss: {val_loss:.4f}")
 
 progress_bar.close()
 print("Finished training")
