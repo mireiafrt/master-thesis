@@ -1283,6 +1283,76 @@ files = [
 traitlets = "*"
 
 [[package]]
+name = "monai"
+version = "1.3.2"
+description = "AI Toolkit for Healthcare Imaging"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "monai-1.3.2-py3-none-any.whl", hash = "sha256:899e2bda5e1fa00675cddbb82197dcfab4496801087d6199d474db2fa17b2452"},
+]
+
+[package.dependencies]
+numpy = ">=1.20"
+torch = ">=1.9"
+
+[package.extras]
+all = ["clearml (>=1.10.0rc0)", "cucim-cu12 ; python_version >= \"3.9\" and python_version <= \"3.10\"", "einops", "fire", "gdown (>=4.7.3)", "h5py", "huggingface-hub", "imagecodecs", "itk (>=5.2)", "jsonschema", "lmdb", "lpips (==0.1.4)", "matplotlib (>=3.6.3)", "mlflow (>=2.12.2)", "nibabel", "ninja", "nni", "nvidia-ml-py", "onnx (>=1.13.0)", "onnxruntime ; python_version <= \"3.10\"", "openslide-python", "optuna", "pandas", "pillow", "psutil", "pydicom", "pynrrd", "pytorch-ignite (==0.4.11)", "pyyaml", "scikit-image (>=0.14.2)", "scipy (>=1.7.1)", "tensorboard", "tensorboardX", "tifffile", "torchvision", "tqdm (>=4.47.0)", "transformers (>=4.36.0,<4.41.0) ; python_version <= \"3.10\"", "zarr"]
+clearml = ["clearml"]
+cucim = ["cucim-cu12"]
+einops = ["einops"]
+fire = ["fire"]
+gdown = ["gdown (>=4.7.3)"]
+h5py = ["h5py"]
+huggingface-hub = ["huggingface-hub"]
+ignite = ["pytorch-ignite (==0.4.11)"]
+imagecodecs = ["imagecodecs"]
+itk = ["itk (>=5.2)"]
+jsonschema = ["jsonschema"]
+lmdb = ["lmdb"]
+lpips = ["lpips (==0.1.4)"]
+matplotlib = ["matplotlib (>=3.6.3)"]
+mlflow = ["mlflow (>=2.12.2)"]
+nibabel = ["nibabel"]
+ninja = ["ninja"]
+nni = ["nni"]
+onnx = ["onnx (>=1.13.0)", "onnxruntime ; python_version <= \"3.10\""]
+openslide = ["openslide-python"]
+optuna = ["optuna"]
+pandas = ["pandas"]
+pillow = ["pillow (!=8.3.0)"]
+psutil = ["psutil"]
+pydicom = ["pydicom"]
+pynrrd = ["pynrrd"]
+pynvml = ["nvidia-ml-py"]
+pyyaml = ["pyyaml"]
+scipy = ["scipy (>=1.7.1)"]
+skimage = ["scikit-image (>=0.14.2)"]
+tensorboard = ["tensorboard"]
+tensorboardx = ["tensorboardX"]
+tifffile = ["tifffile"]
+torchvision = ["torchvision"]
+tqdm = ["tqdm (>=4.47.0)"]
+transformers = ["transformers (>=4.36.0,<4.41.0) ; python_version <= \"3.10\""]
+zarr = ["zarr"]
+
+[[package]]
+name = "monai-generative"
+version = "0.2.3"
+description = "Installer to help to use the prototypes from MONAI generative models in other projects."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "monai-generative-0.2.3.tar.gz", hash = "sha256:0f54719c25fbc498a068004876a04c8bef771d968b013c0af378a5a4fc9a47d7"},
+    {file = "monai_generative-0.2.3-py3-none-any.whl", hash = "sha256:44dee6264e72f2e7577ad41104db48fae2ca701a3c35e2c74c7d14133b5a16a1"},
+]
+
+[package.dependencies]
+monai = ">=1.3.0"
+
+[[package]]
 name = "monai-weekly"
 version = "1.5.dev2518"
 description = "AI Toolkit for Healthcare Imaging"
@@ -2267,7 +2337,7 @@ description = "Python for Window Extensions"
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "sys_platform == \"win32\" and platform_python_implementation != \"PyPy\""
+markers = "platform_python_implementation != \"PyPy\" and sys_platform == \"win32\""
 files = [
     {file = "pywin32-310-cp310-cp310-win32.whl", hash = "sha256:6dd97011efc8bf51d6793a82292419eba2c71cf8e7250cfac03bba284454abc1"},
     {file = "pywin32-310-cp310-cp310-win_amd64.whl", hash = "sha256:c3e78706e4229b915a0821941a84e7ef420bf2b77e08c9dae3c76fd03fd2ae3d"},
@@ -3122,4 +3192,4 @@ test = ["pytest", "pytest-cov"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-content-hash = "663a4056b0f42dfb90550fad1ed2daf060038810cb408ea1f020a36b9e66e343"
+content-hash = "da60296932dce2fc07141bf017c006268ee8fa3df3a7fa15254bb67adbb6281e"

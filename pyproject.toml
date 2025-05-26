@@ -25,7 +25,8 @@ dependencies = [
     "kagglehub (>=0.3.12,<0.4.0)",
     "kaggle (>=1.7.4.2,<2.0.0.0)",
     "ipykernel (>=6.29.5,<7.0.0)",
-    "optuna (>=4.3.0,<5.0.0)"
+    "optuna (>=4.3.0,<5.0.0)",
+    "monai-generative (>=0.2.3,<0.3.0)"
 ]
 
 [build-system]
