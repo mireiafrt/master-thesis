@@ -1,5 +1,5 @@
 paths:
-  metadata: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  metadata_csv: "/home/coder/project/covidxct/proc_slices_metadata.csv"
   model_output: "models/generator/autoencoder"
 
 columns:
