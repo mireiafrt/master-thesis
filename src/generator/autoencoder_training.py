@@ -48,7 +48,6 @@ val_data = [{"image": row[columns["image_path"]]} for _, row in val.iterrows()]
 
 train_transforms = transforms.Compose([
     transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
-    #transforms.EnsureChannelFirstd(keys=["image"]),
     transforms.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
     transforms.RandAffined(
         keys=["image"],                               # Apply to the "image" key in the input dictionary
@@ -63,8 +62,8 @@ train_transforms = transforms.Compose([
 val_transforms = transforms.Compose(
     [
         transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
-        #transforms.EnsureChannelFirstd(keys=["image"]),
         transforms.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
+        transforms.Resized(keys=["image"], spatial_size=[64, 64]),  # crop to fixed size to match train transform
     ]
 )
 

@@ -87,15 +87,7 @@ train_transforms = transforms.Compose([
 val_transforms = transforms.Compose([
     transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
     transforms.ScaleIntensityRanged(keys=["image"], a_min=0, a_max=255, b_min=0, b_max=1, clip=True),
-    transforms.RandAffined(
-        keys=["image"],
-        rotate_range=[(-np.pi/36, np.pi/36)] * 2,
-        translate_range=[(-1, 1)] * 2,
-        scale_range=[(-0.05, 0.05)] * 2,
-        spatial_size=[64, 64],
-        padding_mode="zeros",
-        prob=0.5,
-    ),
+    transforms.Resized(keys=["image"], spatial_size=[64, 64]),  # crop to fixed size to match train transform
     transforms.Lambdad(keys=["label_id"], func=lambda x: torch.tensor(x, dtype=torch.long)), # shape needed for nn.Embedding
     transforms.Lambdad(keys=["sex_id"], func=lambda x: torch.tensor(x, dtype=torch.long)),
     transforms.Lambdad(keys=["age_id"], func=lambda x: torch.tensor(x, dtype=torch.long)),
