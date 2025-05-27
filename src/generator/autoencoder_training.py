@@ -215,8 +215,14 @@ for epoch in range(n_epochs):
 
     # === Logging epoch-level losses ===
     epoch_recon_losses.append(epoch_loss / (step + 1))
-    epoch_gen_losses.append(gen_epoch_loss / (step + 1))
-    epoch_disc_losses.append(disc_epoch_loss / (step + 1))
+    # logging losses if they have been computed
+    if epoch > autoencoder_warm_up_n_epochs:
+        epoch_gen_losses.append(gen_epoch_loss / (step + 1))
+        epoch_disc_losses.append(disc_epoch_loss / (step + 1))
+    # logg null instead of 0 if they have not been computed
+    else:
+        epoch_gen_losses.append(None)
+        epoch_disc_losses.append(None)
 
     # === Validation ===
     if (epoch + 1) % val_interval == 0:
@@ -256,13 +262,16 @@ torch.save(autoencoderkl.state_dict(), output_model_path)
 print(f"Saved trained autoencoder model to: {output_model_path}")
 
 # Create a DataFrame to store the losses (need to fix lenghts of arrays bc they mismatch and this fails to save)
+val_recon_loss_formatted = [val_recon_losses[i // val_interval] if (i + 1) % val_interval == 0 else None for i in range(n_epochs)]
+print(f"Length of arrays: {len(epoch_recon_losses)}, {len(epoch_gen_losses)}, {len(epoch_disc_losses)}, {len(val_recon_loss_formatted)}")
 loss_df = pd.DataFrame({
-    "epoch": list(range(0, n_epochs)),
+    "epoch": list(range(n_epochs)),
     "recon_loss": epoch_recon_losses,
-    "gen_loss": [None] * autoencoder_warm_up_n_epochs + epoch_gen_losses, # pad first warmup epochs with nulls
-    "disc_loss": [None] * autoencoder_warm_up_n_epochs + epoch_disc_losses,
-    "val_recon_loss": [val_recon_losses[i // val_interval] if (i + 1) % val_interval == 0 else None for i in range(n_epochs)]
+    "gen_loss": epoch_gen_losses,
+    "disc_loss": epoch_disc_losses,
+    "val_recon_loss": val_recon_loss_formatted
 })
+
 loss_csv_path = os.path.join(paths["model_output"], "training_losses.csv")
 loss_df.to_csv(loss_csv_path, index=False)
 print(f"Saved training loss log to: {loss_csv_path}")
