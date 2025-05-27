@@ -69,13 +69,13 @@ train_transforms = transforms.Compose([
     transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
     transforms.ScaleIntensityRanged(keys=["image"], a_min=0, a_max=255, b_min=0, b_max=1, clip=True),
     transforms.RandAffined(
-        keys=["image"],
-        rotate_range=[(-np.pi/36, np.pi/36)] * 2,
-        translate_range=[(-1, 1)] * 2,
-        scale_range=[(-0.05, 0.05)] * 2,
-        spatial_size=[64, 64],
-        padding_mode="zeros",
-        prob=0.5,
+        keys=["image"],                               # Apply to the "image" key in the input dictionary
+        rotate_range=[(-np.pi/36, np.pi/36), (-np.pi/36, np.pi/36)],  # Rotation angle range (in radians) for each 2D axis
+        translate_range=[(-1, 1), (-1, 1)],           # Max translation in pixels along x and y
+        scale_range=[(-0.05, 0.05), (-0.05, 0.05)],   # Scale factor range — ±5% random zoom
+        spatial_size=[64, 64],                        # Final output size (crop or pad to this size) --> has to match transform of autoencoder
+        padding_mode="zeros",                         # Fill value for areas outside original image
+        prob=0.5                                      # Apply this transform 50% of the time
     ),
     transforms.RandLambdad(keys=["label_id"], prob=0.15, func=lambda x: label_map['uncond']), # with prob 15%, unconditional label
     transforms.RandLambdad(keys=["sex_id"], prob=0.15, func=lambda x: sex_map['uncond']), # with prob 15%, unconditional sex
