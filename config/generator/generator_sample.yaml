@@ -1,0 +1,13 @@
+paths:
+  metadata_csv: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  autoencoder_model: "models/generator/autoencoder/autoencoder.pth"
+  generator_model: "models/generator/generator.pth"
+  imgs_output: "results/syn_data"
+
+columns:
+  label: "label"
+  attribute_cols: ["sex", "age_group"]
+  image_path: "image_path"
+  split_col: "split"
+
+something_for_conditioning: None
