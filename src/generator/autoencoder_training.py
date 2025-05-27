@@ -255,7 +255,7 @@ output_model_path = os.path.join(paths["model_output"], "autoencoder.pth")
 torch.save(autoencoderkl.state_dict(), output_model_path)
 print(f"Saved trained autoencoder model to: {output_model_path}")
 
-# Create a DataFrame to store the losses
+# Create a DataFrame to store the losses (need to fix lenghts of arrays bc they mismatch and this fails to save)
 loss_df = pd.DataFrame({
     "epoch": list(range(0, n_epochs)),
     "recon_loss": epoch_recon_losses,
