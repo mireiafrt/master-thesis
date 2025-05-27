@@ -4,6 +4,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yaml
 
 import torch
 import torch.nn.functional as F
@@ -25,7 +26,7 @@ from generative.networks.schedulers import DDPMScheduler
 set_determinism(42)
 
 # Load config
-with open("config/generator/autoencoder_train.yaml", "r") as f:
+with open("config/generator/generator_train.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 paths = config["paths"]
@@ -33,6 +34,7 @@ columns = config["columns"]
 training = config["training"]
 
 os.makedirs(paths["model_output"], exist_ok=True)
+device = torch.device("cuda")
 
 ############ PREPARE TRAIN AND VAL DATA #############
 print("Reading metadata ...")
@@ -77,12 +79,12 @@ train_transforms = transforms.Compose([
         padding_mode="zeros",                         # Fill value for areas outside original image
         prob=0.5                                      # Apply this transform 50% of the time
     ),
-    transforms.RandLambdad(keys=["label_id"], prob=0.15, func=lambda x: label_map['uncond']), # with prob 15%, unconditional label
-    transforms.RandLambdad(keys=["sex_id"], prob=0.15, func=lambda x: sex_map['uncond']), # with prob 15%, unconditional sex
-    transforms.RandLambdad(keys=["age_id"], prob=0.15, func=lambda x: age_map['uncond']), # with prob 15%, unconditional age group
-    transforms.Lambdad(keys=["label_id"], func=lambda x: torch.tensor(x, dtype=torch.long)), # shape needed for nn.Embedding
+    transforms.Lambdad(keys=["label_id"], func=lambda x: torch.tensor(x, dtype=torch.long)),
     transforms.Lambdad(keys=["sex_id"], func=lambda x: torch.tensor(x, dtype=torch.long)),
     transforms.Lambdad(keys=["age_id"], func=lambda x: torch.tensor(x, dtype=torch.long)),
+    transforms.RandLambdad(keys=["label_id"], prob=0.15, func=lambda x: torch.tensor(label_map['uncond'], dtype=torch.long)), # with prob 15%, unconditional label
+    transforms.RandLambdad(keys=["sex_id"], prob=0.15, func=lambda x: torch.tensor(sex_map['uncond'], dtype=torch.long)), # with prob 15%, unconditional sex
+    transforms.RandLambdad(keys=["age_id"], prob=0.15, func=lambda x: torch.tensor(age_map['uncond'], dtype=torch.long)), # with prob 15%, unconditional age group
 ])
 val_transforms = transforms.Compose([
     transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
@@ -99,7 +101,6 @@ train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=T
 val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=False, num_workers=4, persistent_workers=True)
 
 ############## DEFINE MODEL AND ARCHITECTURE ##############
-device = torch.device("cuda")
 autoencoderkl = AutoencoderKL(
     spatial_dims=2,
     in_channels=1,
@@ -281,5 +282,4 @@ loss_df.to_csv(loss_csv_path, index=False)
 print(f"Saved training loss log to: {loss_csv_path}")
 
 # Cleanup after training
-progress_bar.close()
 torch.cuda.empty_cache()
