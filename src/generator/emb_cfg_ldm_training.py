@@ -267,6 +267,9 @@ torch.save({
     "age_embed": age_embed.state_dict(),
 }, os.path.join(paths["model_output"], "embeddings.pth"))
 
+# scave scale_factor to use for generater sampling as well
+torch.save({"scale_factor": scale_factor.item()}, os.path.join(paths["model_output"], "scale.pt"))
+
 # Create a DataFrame to store the losses
 loss_df = pd.DataFrame({
     "epoch": list(range(0, n_epochs)),
