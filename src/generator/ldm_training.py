@@ -127,7 +127,6 @@ scaler = GradScaler()
 # === Training settings ===
 n_epochs = training['num_epochs']       # Total number of training epochs
 val_interval = training['val_interval'] # Run validation every N epochs
-guidance_scale = training['guidance_scale']
 # === Logging ===
 epoch_losses = []
 val_losses = []
