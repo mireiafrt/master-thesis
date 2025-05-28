@@ -251,7 +251,7 @@ for epoch in range(n_epochs):
 
         decoded = autoencoderkl.decode(z[0].unsqueeze(0)) 
         # save output
-        plt.imsave(f"{paths['model_output']}/examples/sample_epoch{epoch}.png", decoded[0, 0].detach().cpu(), cmap="gray", vmin=0, vmax=1)
+        plt.imsave(f"{paths['model_output']}/sample_epoch{epoch}.png", decoded[0, 0].detach().cpu(), cmap="gray", vmin=0, vmax=1)
 
 progress_bar.close()
 print("Finished training")

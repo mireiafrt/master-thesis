@@ -200,7 +200,7 @@ for epoch in range(n_epochs):
                 input_noise=z, diffusion_model=unet, scheduler=scheduler, autoencoder_model=autoencoderkl
             )
         # save output
-        plt.imsave(f"{paths['model_output']}/examples_uncond/sample_epoch{epoch}.png", decoded[0, 0].detach().cpu(), cmap="gray", vmin=0, vmax=1)
+        plt.imsave(f"{paths['model_output']}/uncond_sample_epoch{epoch}.png", decoded[0, 0].detach().cpu(), cmap="gray", vmin=0, vmax=1)
 
 progress_bar.close()
 print("Finished training")
