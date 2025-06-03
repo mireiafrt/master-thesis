@@ -11,7 +11,7 @@ columns:
 
 training:
   emb_size: 128
-  batch_size: 128
+  batch_size: 32
   num_epochs: 200
   val_interval: 20
   guidance_scale: 7.0
