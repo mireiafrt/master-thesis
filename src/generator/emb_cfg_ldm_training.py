@@ -247,7 +247,7 @@ for epoch in range(n_epochs):
                 noise_pred_uncond, noise_pred_cond = model_output.chunk(2)
                 noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
 
-                z, _ = scheduler.step(noise_pred, t, z)
+            z, _ = scheduler.step(noise_pred, t, z)
 
         decoded = autoencoderkl.decode(z[0].unsqueeze(0)) 
         # save output
