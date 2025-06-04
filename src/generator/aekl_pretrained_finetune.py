@@ -37,6 +37,7 @@ paths = config["paths"]
 columns = config["columns"]
 training = config["training"]
 
+print("Preparing paths ...")
 # make sure model output path exists
 os.makedirs(paths["model_output"], exist_ok=True)
 
@@ -62,13 +63,8 @@ val_data = [{"image": row[columns["image_path"]]} for _, row in val.iterrows()]
 
 # TRANSFORMS (same as from generative_chestxray MONAI project)
 train_transforms = transforms.Compose([
-    # Load the image file into a dictionary with key "image"
-    transforms.LoadImaged(keys=["image"]),
-    # Ensure the image has channel-first format [C, H, W]
-    transforms.EnsureChannelFirstd(keys=["image"]),
-    # Extract only the first channel and add back the channel dimension: [1, H, W] (keep the grayscale channel)
-    # For CT slices (already 1 channel), this might be redundant
-    transforms.Lambdad(keys=["image"], func=lambda x: x[0, :, :][None,],),
+    # Load the image file into a dictionary with key "image" and ensure [C, H, w]
+    transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
     # Rescale intensity from [0, 255] to [0.0, 1.0] — common normalization step
     transforms.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
     # Crop the central region to fixed size (e.g., 512x512 pixels)
@@ -91,9 +87,7 @@ train_transforms = transforms.Compose([
 ])
 
 val_transforms = transforms.Compose([
-    transforms.LoadImaged(keys=["image"]),
-    transforms.EnsureChannelFirstd(keys=["image"]),
-    transforms.Lambdad(keys=["image"],func=lambda x: x[0, :, :][None,],),
+    transforms.LoadImaged(keys=["image"], ensure_channel_first=True),
     transforms.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
     transforms.CenterSpatialCropd(keys=["image"], roi_size=(512, 512)),
     transforms.ToTensord(keys=["image"]),
@@ -164,6 +158,7 @@ adv_start = training["adv_start"]       # Epoch when the adversarial straining s
 writer_train = SummaryWriter(log_dir=writer_train_path)
 writer_val = SummaryWriter(log_dir=writer_val_path)
 
+print("Starting training ...")
 # === Training loop ===
 for epoch in range(n_epochs):
     # set adv_weight to 0 if adv does not start yet
@@ -176,6 +171,7 @@ for epoch in range(n_epochs):
     
     # Progress bar through batches
     pbar = tqdm(enumerate(train_loader), total=len(train_loader))
+    pbar.set_description(f"Epoch {epoch}")
     for step, x in pbar:
         images = x["image"].to(device)
 
@@ -241,7 +237,7 @@ for epoch in range(n_epochs):
 
         losses["d_loss"] = discriminator_loss
 
-        # === Logging batch losses ===
+        # === Logging batch losses to writer ===
         for k, v in losses.items():
             writer_train.add_scalar(f"{k}", v.item(), epoch * len(train_loader) + step)
 
@@ -256,6 +252,7 @@ for epoch in range(n_epochs):
 
 
     # validation epoch
+    print("Running validation epoch ...")
     if (epoch + 1) % eval_freq == 0:
         # set params
         step=len(train_loader) * epoch
@@ -308,27 +305,27 @@ for epoch in range(n_epochs):
                 for k, v in losses.items():
                     total_losses[k] = total_losses.get(k, 0) + v.item() * images.shape[0]
 
-        for k in total_losses.keys():
-            total_losses[k] /= len(val_loader.dataset)
+            for k in total_losses.keys():
+                total_losses[k] /= len(val_loader.dataset)
 
-        for k, v in total_losses.items():
-            writer_val.add_scalar(f"{k}", v, step)
+            for k, v in total_losses.items():
+                writer_val.add_scalar(f"{k}", v, step)
 
-        # log reconstructions
-        img_npy_0 = np.clip(a=images[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
-        recons_npy_0 = np.clip(a=reconstruction[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
-        img_npy_1 = np.clip(a=images[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
-        recons_npy_1 = np.clip(a=reconstruction[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+            # log reconstructions
+            img_npy_0 = np.clip(a=images[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+            recons_npy_0 = np.clip(a=reconstruction[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+            img_npy_1 = np.clip(a=images[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+            recons_npy_1 = np.clip(a=reconstruction[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
 
-        img_row_0 = np.concatenate((img_npy_0,recons_npy_0,img_npy_1,recons_npy_1,), axis=1,)
+            img_row_0 = np.concatenate((img_npy_0,recons_npy_0,img_npy_1,recons_npy_1,), axis=1,)
 
-        fig = plt.figure(dpi=300)
-        plt.imshow(img_row_0, cmap="gray")
-        plt.axis("off")
-        writer_val.add_figure("RECONSTRUCTION", fig, step)
+            fig = plt.figure(dpi=300)
+            plt.imshow(img_row_0, cmap="gray")
+            plt.axis("off")
+            writer_val.add_figure("RECONSTRUCTION", fig, step)
 
-        val_loss = total_losses["l1_loss"]
-        print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
+            val_loss = total_losses["l1_loss"]
+            print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
 
 
 print(f"Training finished!")
