@@ -1,0 +1,19 @@
+paths:
+  metadata_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
+  writers_outputs: 'logs/finetune_gen'
+  pretrained_model_path: 'models/pre_trained/diffusion_model.pth'
+  autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
+  model_output: "models/generator/generator"
+
+columns:
+  label: "label"
+  attribute_cols: ["sex", "age_group"]
+  image_path: "image_path"
+  split_col: "split"
+
+training:
+  batch_size: 32
+  num_epochs: 400
+  eval_freq: 10
+  emb_size: 1024
+  guidance_scale: 7
