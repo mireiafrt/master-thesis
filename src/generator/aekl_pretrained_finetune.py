@@ -121,12 +121,9 @@ autoencoderkl = AutoencoderKL(
     with_decoder_nonlocal_attn=False               # Use non-local self-attention in the decoder (disabled)
 )
 autoencoderkl = autoencoderkl.to(device)
-
 # Load pretrained weights
-# state_dict = torch.load(paths["pretrained_model_path"], map_location=device)
-# Load into your model
-# autoencoderkl.load_state_dict(state_dict, strict=True)  # strict=False if some layers mismatch
-# print("Loaded pretrained autoencoder weights")
+autoencoderkl.load_state_dict(torch.load(paths["pretrained_model_path"])) # load the trained autoencoder model
+print("Loaded pretrained autoencoder weights")
 
 # Initialize a PatchGAN-style discriminator (same config from pre-trained)
 discriminator = PatchDiscriminator(
@@ -163,7 +160,6 @@ kl_weight = 0.00000001                  # Weight for KL divergence in the VAE lo
 n_epochs = training['num_epochs']       # Total number of training epochs
 eval_freq = training['eval_freq']    # Run validation every N epochs
 adv_start = training["adv_start"]       # Epoch when the adversarial straining starts
-start_epoch = 0
 # === Logging ===
 writer_train = SummaryWriter(log_dir=writer_train_path)
 writer_val = SummaryWriter(log_dir=writer_val_path)
@@ -312,26 +308,26 @@ for epoch in range(n_epochs):
                 for k, v in losses.items():
                     total_losses[k] = total_losses.get(k, 0) + v.item() * images.shape[0]
 
-            for k in total_losses.keys():
-                total_losses[k] /= len(val_loader.dataset)
+        for k in total_losses.keys():
+            total_losses[k] /= len(val_loader.dataset)
 
-            for k, v in total_losses.items():
-                writer_val.add_scalar(f"{k}", v, step)
+        for k, v in total_losses.items():
+            writer_val.add_scalar(f"{k}", v, step)
 
-            # log reconstructions
-            img_npy_0 = np.clip(a=images[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
-            recons_npy_0 = np.clip(a=reconstruction[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
-            img_npy_1 = np.clip(a=images[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
-            recons_npy_1 = np.clip(a=reconstruction[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+        # log reconstructions
+        img_npy_0 = np.clip(a=images[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+        recons_npy_0 = np.clip(a=reconstruction[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+        img_npy_1 = np.clip(a=images[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
+        recons_npy_1 = np.clip(a=reconstruction[1, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
 
-            img_row_0 = np.concatenate((img_npy_0,recons_npy_0,img_npy_1,recons_npy_1,), axis=1,)
+        img_row_0 = np.concatenate((img_npy_0,recons_npy_0,img_npy_1,recons_npy_1,), axis=1,)
 
-            fig = plt.figure(dpi=300)
-            plt.imshow(img_row_0, cmap="gray")
-            plt.axis("off")
-            writer_val.add_figure("RECONSTRUCTION", fig, step)
+        fig = plt.figure(dpi=300)
+        plt.imshow(img_row_0, cmap="gray")
+        plt.axis("off")
+        writer_val.add_figure("RECONSTRUCTION", fig, step)
 
-            val_loss = total_losses["l1_loss"]
+        val_loss = total_losses["l1_loss"]
         print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
 
 
