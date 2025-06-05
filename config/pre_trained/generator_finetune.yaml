@@ -12,8 +12,8 @@ columns:
   split_col: "split"
 
 training:
-  batch_size: 32
-  num_epochs: 400
+  batch_size: 8
+  num_epochs: 200
   eval_freq: 10
   emb_size: 1024
   guidance_scale: 7
