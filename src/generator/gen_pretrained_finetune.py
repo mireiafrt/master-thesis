@@ -289,6 +289,10 @@ for epoch in range(n_epochs):
             diffusion.eval()
             total_losses = OrderedDict()
 
+            # this is for parallelized code, but just in case i will keep it
+            raw_aekl = autoencoderkl.module if hasattr(autoencoderkl, "module") else autoencoderkl
+            raw_model = diffusion.module if hasattr(diffusion, "module") else diffusion
+
             for x in val_loader:
                 images = x["image"].to(device)
                 reports = x["report"].to(device)
@@ -328,18 +332,17 @@ for epoch in range(n_epochs):
             print("Sampling images ...")
             spatial_shape=tuple(e.shape[1:])
             with torch.no_grad():
-                latent = torch.randn((1,) + spatial_shape)
-                latent = latent.to(device)
+                latent = torch.randn((1,) + spatial_shape).to(device)
 
-                prompt_embeds = torch.cat((49406 * torch.ones(1, 1), 49407 * torch.ones(1, 76)), 1).long()
-                prompt_embeds = text_encoder(prompt_embeds.squeeze(1)).to(device)
+                prompt_embeds = torch.cat((49406 * torch.ones(1, 1), 49407 * torch.ones(1, 76)), 1).long().to(device)
+                prompt_embeds = text_encoder(prompt_embeds.squeeze(1))
                 prompt_embeds = prompt_embeds[0]
 
                 for t in tqdm(scheduler.timesteps, ncols=70):
-                    noise_pred = diffusion(x=latent, timesteps=torch.asarray((t,)).to(device), context=prompt_embeds)
+                    noise_pred = raw_model(x=latent, timesteps=torch.asarray((t,)).to(device), context=prompt_embeds)
                     latent, _ = scheduler.step(noise_pred, t, latent)
 
-                x_hat = autoencoderkl.model.decode(latent / scale_factor)
+                x_hat = raw_aekl.model.decode(latent / scale_factor)
                 img_0 = np.clip(a=x_hat[0, 0, :, :].cpu().numpy(), a_min=0, a_max=1)
                 fig = plt.figure(dpi=300)
                 plt.imshow(img_0, cmap="gray")
