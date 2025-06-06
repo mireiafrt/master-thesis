@@ -43,6 +43,7 @@ paths = config["paths"]
 columns = config["columns"]
 training = config["training"]
 
+print("Preparing paths ...")
 # make sure model output path exists
 os.makedirs(paths["model_output"], exist_ok=True)
 
@@ -66,6 +67,7 @@ def build_clip_prompt(row):
     diagnosis_text = "healthy" if row["label"] == 0 else "with COVID-19"
     return f"A {sex_term} patient in the {row['age_group']} age group, {diagnosis_text}."
 test_df["report"] = test_df.apply(build_clip_prompt, axis=1)
+print("Reports created ...")
 
 # split set into 80-20 train-val
 train, val = train_test_split(test_df, train_size=0.8, stratify=test_df[columns["label"]], random_state=42)
@@ -151,6 +153,7 @@ train_ds = Dataset(data=train_data, transform=train_transforms)
 val_ds = Dataset(data=val_data, transform=val_transforms)
 train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=4, persistent_workers=True)
 val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=True, num_workers=4, persistent_workers=True)
+print("Loaders prepared ...")
 
 ######## LOAD AUTOENCODER NET AND DEFINE GENERATOR ARCH, LOSS, OPT, ... ########
 device = torch.device("cuda")
@@ -167,7 +170,7 @@ class Stage1Wrapper(nn.Module):
         z = self.model.sampling(z_mu, z_sigma)
         return z
     
-print(f"Loading Autoencoder from {paths["autoencoder_path"]}")
+print(f"Loading Autoencoder from {paths['autoencoder_path']}")
 autoencoderkl = AutoencoderKL(
     spatial_dims=2,                                # 2D data (for CT slices or X-rays, use 3 for 3D volumes)
     in_channels=1,                                 # Input has 1 channel (grayscale image)
@@ -186,7 +189,7 @@ autoencoderkl = Stage1Wrapper(model=autoencoderkl)
 autoencoderkl.eval()
 
 # Create the diffusion model and load pre-trained model
-print("Creating model...")
+print("Creating unet model...")
 diffusion = DiffusionModelUNet(
     spatial_dims=2,              # 2D CT slices
     in_channels=3,               # match AutoencoderKL latent_channels (latent space channels)
@@ -200,18 +203,20 @@ diffusion = DiffusionModelUNet(
 )
 diffusion = diffusion.to(device)
 diffusion.load_state_dict(torch.load(paths["pretrained_model_path"])) # load the pretrained generator model
+print("Loaded pretrained model ...")
 
 # set scheduler
-scheduler = DDPMScheduler(num_train_timesteps=1000, beta_schedule="scaled_linear", beta_start=0.0015, beta_end=0.0195, prediction_type="v_prediction")
+scheduler = DDPMScheduler(num_train_timesteps=1000, schedule="scaled_linear_beta", beta_start=0.0015, beta_end=0.0195, prediction_type="v_prediction")
 
 # set up text encoder
 text_encoder = CLIPTextModel.from_pretrained("stabilityai/stable-diffusion-2-1-base", subfolder="text_encoder")
 text_encoder = text_encoder.to(device)
+print("Loaded text encoder ...")
 
 # setting up scaling_factor from autoencoder z std
 eda_data = first(train_loader)["image"]
 with torch.no_grad():
-        z = autoencoderkl.encode_stage_2_inputs(eda_data.to(device))
+        z = autoencoderkl.forward(eda_data.to(device))
 scale_factor = 1 / torch.std(z)
 print(f"Scale factor: {scale_factor}")
 
@@ -236,6 +241,7 @@ for epoch in range(n_epochs):
     diffusion.train()
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader))
+    pbar.set_description(f"Epoch {epoch}")
     for step, x in pbar:
         images = x["image"].to(device)
         reports = x["report"].to(device)
@@ -274,8 +280,10 @@ for epoch in range(n_epochs):
 
     # val epoch
     if (epoch + 1) % eval_freq == 0:
+        print("Validation epoch ...")
         step=len(train_loader) * epoch
-        sample=True if (epoch + 1) % (eval_freq * 2) == 0 else False
+        # sample=True if (epoch + 1) % (eval_freq * 2) == 0 else False
+        sample=True if (epoch + 1) % (eval_freq) == 0 else False # will make it sample always in validation
         # evaluate
         with torch.no_grad():
             diffusion.eval()
@@ -317,13 +325,14 @@ for epoch in range(n_epochs):
 
         # sample data if sample (uncoditional from moani pretrained??)
         if sample:
+            print("Sampling images ...")
             spatial_shape=tuple(e.shape[1:])
             with torch.no_grad():
                 latent = torch.randn((1,) + spatial_shape)
                 latent = latent.to(device)
 
                 prompt_embeds = torch.cat((49406 * torch.ones(1, 1), 49407 * torch.ones(1, 76)), 1).long()
-                prompt_embeds = text_encoder(prompt_embeds.squeeze(1))
+                prompt_embeds = text_encoder(prompt_embeds.squeeze(1)).to(device)
                 prompt_embeds = prompt_embeds[0]
 
                 for t in tqdm(scheduler.timesteps, ncols=70):
@@ -337,7 +346,7 @@ for epoch in range(n_epochs):
                 plt.axis("off")
                 writer_val.add_figure("SAMPLE", fig, step)
 
-        val_loss = total_losses["l1_loss"]
+        val_loss = total_losses["loss"]
         print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
 
 print("Finished training")

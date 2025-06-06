@@ -252,8 +252,8 @@ for epoch in range(n_epochs):
 
 
     # validation epoch
-    print("Running validation epoch ...")
     if (epoch + 1) % eval_freq == 0:
+        print("Running validation epoch ...")
         # set params
         step=len(train_loader) * epoch
         adv_weight=adv_weight if epoch >= adv_start else 0.0
