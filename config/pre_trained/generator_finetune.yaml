@@ -13,7 +13,7 @@ columns:
 
 training:
   batch_size: 8
-  num_epochs: 200
+  num_epochs: 170
   eval_freq: 10
   emb_size: 1024
   guidance_scale: 7
