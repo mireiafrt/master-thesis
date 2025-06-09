@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 from monai.utils import set_determinism
 from generative.networks.nets import AutoencoderKL, DiffusionModelUNet
-from generative.networks.schedulers import DDIMScheduler
+from generative.networks.schedulers import DDIMScheduler, DDPMScheduler
 from transformers import CLIPTextModel, CLIPTokenizer
 
 
@@ -29,6 +29,7 @@ paths = config["paths"]
 num_inference_steps = config["num_inference_steps"]
 guidance_scale = config["guidance_scale"]
 scale_factor = float(config["scale_factor"])
+img_size = config["img_size"]
 sample_size = config["sample_size"]
 filters = config["conditioning"]
 
@@ -102,6 +103,7 @@ diffusion.eval()
 
 # load scheduler (now the DDIM instead of DDPM)
 scheduler = DDIMScheduler(num_train_timesteps=1000, beta_start=0.0015, beta_end=0.0205, schedule="scaled_linear_beta", prediction_type="v_prediction", clip_sample=False)
+#scheduler = DDPMScheduler(num_train_timesteps=1000, schedule="scaled_linear_beta", beta_start=0.0015, beta_end=0.0195, prediction_type="v_prediction")
 scheduler.set_timesteps(num_inference_steps)
 
 # set up tokenizer and text encoder
@@ -123,8 +125,8 @@ def generate_images_from_reports(df):
         prompt_embeds = text_encoder(text_input_ids.squeeze(1))
         prompt_embeds = prompt_embeds[0].to(device)
 
-        # Sample random latent noise (3 channels, size 256 by 256 image)
-        noise = torch.randn((1, 3, 256, 256)).to(device)
+        # Sample random latent noise (3 channels, size img_size)
+        noise = torch.randn((1, 3, img_size, img_size)).to(device)
 
         # Start sampling process
         with torch.no_grad():
