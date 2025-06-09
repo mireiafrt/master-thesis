@@ -1,5 +1,5 @@
 paths:
-  metadata_csv: "/home/coder/project/covidxct/proc_slices_metadata.csv"
+  metadata_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
   autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
   generator_path: "models/generator/generator/finetuned_generator.pth"
   scale_factor: 'models/generator/generator/scale.pt'
@@ -12,8 +12,8 @@ scale_factor: 0.96109539270401
 
 sample_size: 50
 
-conditioning:
-  split: "val"
-  sex: None
-  age_group: None
-  label: None
+conditioning:       # use null for no filter
+  split: "val"      # val, ground_truth, test, train
+  sex: null         # F or M
+  age_group: null   # Under 20, 20-40, 40-60, 60-80, Over-80
+  label: null       # 0 or 1

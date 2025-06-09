@@ -26,7 +26,6 @@ with open("config/generator/generator_sample.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 paths = config["paths"]
-columns = config["columns"]
 num_inference_steps = config["num_inference_steps"]
 guidance_scale = config["guidance_scale"]
 scale_factor = float(config["scale_factor"])
@@ -40,7 +39,9 @@ os.makedirs(paths["imgs_output"], exist_ok=True)
 ########## PREPARE PROMPTS and RESULT CSV ##########
 metadata = pd.read_csv(paths["metadata_csv"])
 metadata = metadata[metadata["use"] == True]
+
 # filter metadata based on the conditioning
+print("Filters:", filters)
 df = metadata.copy()
 for key, value in filters.items():
     if value is not None:
@@ -100,7 +101,7 @@ diffusion = diffusion.to(device)
 diffusion.eval()
 
 # load scheduler (now the DDIM instead of DDPM)
-scheduler = DDIMScheduler(num_train_timesteps=1000, beta_start=0.0015, beta_end=0.0205, schedule="scaled_linear", prediction_type="v_prediction", clip_sample=False)
+scheduler = DDIMScheduler(num_train_timesteps=1000, beta_start=0.0015, beta_end=0.0205, schedule="scaled_linear_beta", prediction_type="v_prediction", clip_sample=False)
 scheduler.set_timesteps(num_inference_steps)
 
 # set up tokenizer and text encoder
@@ -158,6 +159,7 @@ def generate_images_from_reports(df):
 
 
 # call function on appropiate subset of dataframe with prepared prompts
+print(f"Generating {len(df)} syntehtic images...")
 df = generate_images_from_reports(df)
 
 # create new datframe with only syn_path and report (columns) that generated it
@@ -165,6 +167,7 @@ cols_keep = ['sex', 'age_group', 'label', 'report', 'syn_path']
 sub_df = df[cols_keep]
 # save dataframe
 sub_df.to_csv(paths["result_csv"], index=False)
+print("Saved results csv...")
 
 # Cleanup after training
 torch.cuda.empty_cache()
