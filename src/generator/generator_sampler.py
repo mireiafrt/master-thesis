@@ -30,6 +30,7 @@ columns = config["columns"]
 num_inference_steps = config["num_inference_steps"]
 guidance_scale = config["guidance_scale"]
 scale_factor = float(config["scale_factor"])
+sample_size = config["sample_size"]
 filters = config["conditioning"]
 
 print("Preparing paths ...")
@@ -46,6 +47,11 @@ for key, value in filters.items():
         df = df[df[key] == value]
 df = df.reset_index(drop=True)
 print("Filtered data...")
+
+# Sample a subset instead of full data if it is none
+if sample_size is not None:
+    df = df.iloc[:sample_size].reset_index(drop=True)
+    print(f"Subsampled to {sample_size} rows.")
 
 # Create "report" col --> Sentence like "Female, age group under 20, healthy" or "x, x, with COVID-19"
 def build_clip_prompt(row):

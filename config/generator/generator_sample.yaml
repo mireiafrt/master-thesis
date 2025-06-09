@@ -10,6 +10,8 @@ num_inference_steps: 200
 guidance_scale: 7
 scale_factor: 0.96109539270401
 
+sample_size: 50
+
 conditioning:
   split: "val"
   sex: None
