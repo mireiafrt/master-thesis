@@ -5,12 +5,11 @@ paths:
   imgs_output: "data/results/experiment/syn_data"
   result_csv: 'data/results/experiment/syn_data.csv'
 
-num_inference_steps: 50
+num_inference_steps: 100
 guidance_scale: 7
 scale_factor: 0.96109539270401
-img_size: 256
 
-sample_size: 10
+sample_size: 100
 
 conditioning:       # use null for no filter
   split: "val"      # val, ground_truth, test, train

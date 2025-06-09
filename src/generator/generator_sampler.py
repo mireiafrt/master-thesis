@@ -29,7 +29,6 @@ paths = config["paths"]
 num_inference_steps = config["num_inference_steps"]
 guidance_scale = config["guidance_scale"]
 scale_factor = float(config["scale_factor"])
-img_size = config["img_size"]
 sample_size = config["sample_size"]
 filters = config["conditioning"]
 
@@ -125,8 +124,8 @@ def generate_images_from_reports(df):
         prompt_embeds = text_encoder(text_input_ids.squeeze(1))
         prompt_embeds = prompt_embeds[0].to(device)
 
-        # Sample random latent noise (3 channels, size img_size)
-        noise = torch.randn((1, 3, img_size, img_size)).to(device)
+        # Sample random latent noise (3 channels, 64x64 is latent size)
+        noise = torch.randn((1, 3, 64, 64)).to(device)
 
         # Start sampling process
         with torch.no_grad():
