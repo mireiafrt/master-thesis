@@ -3,16 +3,13 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from itertools import combinations
 from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
-import matplotlib.pyplot as plt
 
 import torch
-from torchvision.models import inception_v3
-from torchvision import transforms as T
 import torch.nn.functional as F
+from transformers import CLIPProcessor, CLIPModel
 
 from monai import transforms
 from monai.data import DataLoader, Dataset
@@ -65,43 +62,48 @@ common_transforms = transforms.Compose([
     transforms.LoadImaged(keys=["image"]),
     transforms.EnsureChannelFirstd(keys=["image"]),
     transforms.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
-    # transforms for inception model
-    transforms.Resized(keys=["image"], spatial_size=(299, 299)),
+    transforms.Resized(keys=["image"], spatial_size=(224, 224)), # size needed for CLIP
     transforms.Lambdad(keys=["image"], func=lambda x: x.repeat(3, 1, 1) if x.shape[0] == 1 else x),
-    transforms.NormalizeIntensityd(keys=["image"], subtrahend=0.5, divisor=0.5),
+    # no normalization for CLIP?
 ])
 
-rea_ds = Dataset(data=real_data, transform=common_transforms)
-real_loader = DataLoader(rea_ds, batch_size=16, shuffle=False, num_workers=4)
+# Create Datasets and Loaders
+real_ds = Dataset(data=real_data, transform=common_transforms)
+real_loader = DataLoader(real_ds, batch_size=16, shuffle=False, num_workers=4)
 syn_ds = Dataset(data=syn_data, transform=common_transforms)
 syn_loader = DataLoader(syn_ds, batch_size=16, shuffle=False, num_workers=4)
 
 # prepare model to impute image features
 device = torch.device("cuda")
-# Load InceptionV3
-inception = inception_v3(pretrained=True, transform_input=False)  # aux_logits will default to True
-inception.fc = torch.nn.Identity()  # remove final classification head
-inception.eval().to(device)
+# load CLIP model
+clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+clip_model.eval()
 
 ####### COMPUTE FEATURES #######
 synth_features = []
 real_features = []
 
 # loop through batches of both loaders together
-for step, (real_batch, syn_batch) in tqdm(enumerate(zip(real_loader, syn_loader)), total=len(real_loader)):
-    # Get the real images
-    real_images = real_batch["image"].to(device)
-    
-    # Get the syn images
-    syn_images = syn_batch["image"].to(device)
+for real_batch, syn_batch in tqdm(zip(real_loader, syn_loader), total=len(real_loader)):
+    # Convert to PIL
+    real_imgs = [transforms.ToPIL()(img.cpu()) for img in real_batch["image"]]
+    syn_imgs = [transforms.ToPIL()(img.cpu()) for img in syn_batch["image"]]
 
-    # Get the features for the real data
-    real_eval_feats = inception(real_images)
-    real_features.append(real_eval_feats)
+    # Process with CLIP
+    real_inputs = clip_processor(images=real_imgs, return_tensors="pt", padding=True).to(device)
+    syn_inputs = clip_processor(images=syn_imgs, return_tensors="pt", padding=True).to(device)
 
-    # Get the features for the synthetic data
-    synth_eval_feats = inception(syn_images)
-    synth_features.append(synth_eval_feats)
+    with torch.no_grad():
+        real_feats = clip_model.get_image_features(**real_inputs)
+        syn_feats = clip_model.get_image_features(**syn_inputs)
+
+    # Normalize embeddings (recommended)
+    real_feats = F.normalize(real_feats, dim=-1)
+    syn_feats = F.normalize(syn_feats, dim=-1)
+
+    real_features.append(real_feats)
+    synth_features.append(syn_feats)
 
 ####### COMPUTE FID #######
 synth_features = torch.vstack(synth_features)
