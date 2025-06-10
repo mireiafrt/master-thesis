@@ -72,9 +72,9 @@ common_transforms = transforms.Compose([
 ])
 
 rea_ds = Dataset(data=real_data, transform=common_transforms)
-real_loader = DataLoader(rea_ds, batch_size=16, shuffle=True, num_workers=4)
+real_loader = DataLoader(rea_ds, batch_size=16, shuffle=False, num_workers=4)
 syn_ds = Dataset(data=syn_data, transform=common_transforms)
-syn_loader = DataLoader(syn_ds, batch_size=16, shuffle=True, num_workers=4)
+syn_loader = DataLoader(syn_ds, batch_size=16, shuffle=False, num_workers=4)
 
 # prepare model to impute image features
 device = torch.device("cuda")
