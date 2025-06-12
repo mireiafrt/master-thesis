@@ -28,9 +28,22 @@ from generative.networks.nets import AutoencoderKL, DiffusionModelUNet, PatchDis
 from generative.networks.schedulers import DDPMScheduler
 from transformers import CLIPTokenizer, CLIPTextModel
 
+from torchvision.models import inception_v3
+from generative.metrics import MultiScaleSSIMMetric, SSIMMetric, FIDMetric
+
+
+def print_cuda_memory(tag=""):
+    if torch.cuda.is_available():
+        mem_allocated = torch.cuda.memory_allocated() / 1024**2  # in MB
+        mem_reserved = torch.cuda.memory_reserved() / 1024**2    # in MB
+        print(f"[{tag}] CUDA memory allocated: {mem_allocated:.2f} MB, reserved: {mem_reserved:.2f} MB")
+    else:
+        print(f"[{tag}] CUDA not available")
+
 # clean up gpu cache before starting
 torch.cuda.empty_cache()
 torch.cuda.ipc_collect()
+print_cuda_memory("Start")
 
 # set global seed
 set_determinism(42)
@@ -149,10 +162,17 @@ val_transforms = transforms.Compose([
     ApplyTokenizerd(keys=["report"]),
 ])
 
+# transforms for the FID calculation
+fid_transform = transforms.Compose([
+    transforms.Resized(keys=["image"], spatial_size=(299, 299)),
+    transforms.Lambdad(keys=["image"], func=lambda x: x.repeat(3, 1, 1) if x.shape[0] == 1 else x),
+    transforms.NormalizeIntensityd(keys=["image"], subtrahend=0.5, divisor=0.5),
+])
+
 train_ds = Dataset(data=train_data, transform=train_transforms)
 val_ds = Dataset(data=val_data, transform=val_transforms)
 train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=4, persistent_workers=True)
-val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=True, num_workers=4, persistent_workers=True)
+val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=False, num_workers=4, persistent_workers=True)
 print("Loaders prepared ...")
 
 ######## LOAD AUTOENCODER NET AND DEFINE GENERATOR ARCH, LOSS, OPT, ... ########
@@ -187,6 +207,7 @@ autoencoderkl = autoencoderkl.to(device)
 autoencoderkl.load_state_dict(torch.load(paths["autoencoder_path"])) # load the trained autoencoder model
 autoencoderkl = Stage1Wrapper(model=autoencoderkl)
 autoencoderkl.eval()
+print_cuda_memory("After Autoencoder Loaded")
 
 # Create the diffusion model and load pre-trained model
 print("Creating unet model...")
@@ -204,6 +225,7 @@ diffusion = DiffusionModelUNet(
 diffusion = diffusion.to(device)
 diffusion.load_state_dict(torch.load(paths["pretrained_model_path"])) # load the pretrained generator model
 print("Loaded pretrained model ...")
+print_cuda_memory("After DM Loaded")
 
 # set scheduler
 scheduler = DDPMScheduler(num_train_timesteps=1000, schedule="scaled_linear_beta", beta_start=0.0015, beta_end=0.0195, prediction_type="v_prediction")
@@ -211,7 +233,9 @@ scheduler = DDPMScheduler(num_train_timesteps=1000, schedule="scaled_linear_beta
 # set up text encoder
 text_encoder = CLIPTextModel.from_pretrained("stabilityai/stable-diffusion-2-1-base", subfolder="text_encoder")
 text_encoder = text_encoder.to(device)
+text_encoder.eval()
 print("Loaded text encoder ...")
+print_cuda_memory("After Text Encoder loaded")
 
 # setting up scaling_factor from autoencoder z std
 eda_data = first(train_loader)["image"]
@@ -219,12 +243,24 @@ with torch.no_grad():
         z = autoencoderkl.forward(eda_data.to(device))
 scale_factor = 1 / torch.std(z)
 print(f"Scale factor: {scale_factor}")
+print_cuda_memory("After calculating scale factor")
 
 # set optimizer
 optimizer = torch.optim.Adam(diffusion.parameters(), lr=0.000025)
 
 # set GradScaler
 scaler = GradScaler()
+
+# initialize metrics
+ms_ssim = MultiScaleSSIMMetric(spatial_dims=2, data_range=1.0, kernel_size=11) # changed kernel size to 11 (standard), MONAI was using 4 (for small images)
+ssim = SSIMMetric(spatial_dims=2, data_range=1.0, kernel_size=11) # changed kernel size to 11 (standard), MONAI was using 4 (for small images)
+fid_metric = FIDMetric()
+
+# Load InceptionV3 for FID
+inception = inception_v3(pretrained=True, transform_input=False)  # aux_logits will default to True
+inception.fc = torch.nn.Identity()  # remove final classification head
+inception.eval().to(device)
+print_cuda_memory("After Inception loaded")
 
 ############ TRAIN MODEL ############
 # === Training settings ===
@@ -234,6 +270,10 @@ guidance_scale = training['guidance_scale']
 # === Logging ===
 writer_train = SummaryWriter(log_dir=writer_train_path)
 writer_val = SummaryWriter(log_dir=writer_val_path)
+
+# keep track of best metrics
+best_fid = np.inf # for fid, the smaller the better
+best_ms_ssim = 0 # for ms-ssim it goes from 0 to 1, 1 being the best
 
 # === Training loop ===
 for epoch in range(n_epochs):
@@ -293,7 +333,13 @@ for epoch in range(n_epochs):
             raw_aekl = autoencoderkl.module if hasattr(autoencoderkl, "module") else autoencoderkl
             raw_model = diffusion.module if hasattr(diffusion, "module") else diffusion
 
-            for x in val_loader:
+            # arrays to store images and features for metrics calculation
+            ms_ssim_scores = []
+            ssim_scores = []
+            synth_features = []
+            real_features = []
+
+            for x in tqdm(val_loader, desc=f"Val Epoch {epoch}"):
                 images = x["image"].to(device)
                 reports = x["report"].to(device)
                 timesteps = torch.randint(0, scheduler.num_train_timesteps, (images.shape[0],), device=device).long()
@@ -315,17 +361,60 @@ for epoch in range(n_epochs):
                         target = noise
                     loss = F.mse_loss(noise_pred.float(), target.float())
 
+                    # decode images and store for metrics calculation
+                    latent_hat = raw_aekl.model.decode(noise_pred / scale_factor)
+                    latent_hat = torch.clamp(latent_hat, 0, 1)
+
+                    # compute ms-ssim and ssim metrics and store
+                    ms_ssim_scores.append(ms_ssim(images, latent_hat))
+                    ssim_scores.append(ssim(images, latent_hat))
+
+                    # Prepare images for FID (resize, 3ch, normalize)
+                    real_proc = torch.stack([fid_transform({"image": img})["image"] for img in images])
+                    fake_proc = torch.stack([fid_transform({"image": img})["image"] for img in latent_hat])
+                    # Compute features for this batch
+                    with torch.no_grad():
+                        real_feats = inception(real_proc)
+                        fake_feats = inception(fake_proc)
+                    real_features.append(real_feats)
+                    synth_features.append(fake_feats)
+
                 loss = loss.mean()
                 losses = OrderedDict(loss=loss)
 
                 for k, v in losses.items():
                     total_losses[k] = total_losses.get(k, 0) + v.item() * images.shape[0]
 
+        # Stack metrics 
+        ms_ssim_scores = torch.cat(ms_ssim_scores, dim=0)
+        ssim_scores = torch.cat(ssim_scores, dim=0)
+        synth_features = torch.vstack(synth_features)
+        real_features = torch.vstack(real_features)
+
+        # Compute metrics
+        ms_ssim_score = ms_ssim_scores.mean().item()
+        ssim_score = ssim_scores.mean().item()
+        fid_score = fid_metric(synth_features, real_features).item()
+        print(f"epoch {epoch} MS-SSIM: {ms_ssim_score} & FID: {fid_score:.4f}")
+
+        # compare fid and ms_ssim to best scores to see if this is the best epoch yet
+        if fid_score <= best_fid and ms_ssim_score >= best_ms_ssim:
+            best_fid = fid_score
+            best_ms_ssim = ms_ssim_score
+            # save model
+            torch.save(diffusion.state_dict(), os.path.join(paths["model_output"], "best_finetuned_generator.pth"))
+            print(f"Saved new best model! Best FID: {best_fid}, Best MS-SSIM: {best_ms_ssim}")
+
         for k in total_losses.keys():
             total_losses[k] /= len(val_loader.dataset)
 
         for k, v in total_losses.items():
             writer_val.add_scalar(f"{k}", v, step)
+        
+        # Log metrics to writer as well
+        writer_val.add_scalar("FID", fid_score, step)
+        writer_val.add_scalar("MS-SSIM", ms_ssim_score, step)
+        writer_val.add_scalar("SSIM", ssim_score, step)
 
         # sample data if sample (uncoditional from moani pretrained??)
         if sample:
@@ -350,12 +439,12 @@ for epoch in range(n_epochs):
                 writer_val.add_figure("SAMPLE", fig, step)
 
         val_loss = total_losses["loss"]
-        print(f"epoch {epoch + 1} val loss: {val_loss:.4f}")
+        print(f"epoch {epoch} val loss: {val_loss:.4f}")
 
 print("Finished training")
 
 # save model at the end to model_output + "finetuned_generator.pth"
-output_model_path = os.path.join(paths["model_output"], "finetuned_generator.pth")
+output_model_path = os.path.join(paths["model_output"], "final_finetuned_generator.pth")
 torch.save(diffusion.state_dict(), output_model_path)
 print(f"Saved trained unet model to: {output_model_path}")
 
@@ -365,4 +454,3 @@ torch.save({"scale_factor": scale_factor.item()}, os.path.join(paths["model_outp
 # Cleanup after training
 torch.cuda.empty_cache()
 
-        
