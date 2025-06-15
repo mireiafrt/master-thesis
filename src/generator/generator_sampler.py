@@ -49,10 +49,10 @@ for key, value in filters.items():
 df = df.reset_index(drop=True)
 print("Filtered data...")
 
-# Sample a subset instead of full data if it is none
+# Sample a subset instead of full data if it is none (random)
 if sample_size is not None:
-    df = df.iloc[:sample_size].reset_index(drop=True)
-    print(f"Subsampled to {sample_size} rows.")
+    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+    print(f"Subsampled to {sample_size} random rows with seed 42.")
 
 # Create "report" col --> Sentence like "Female, age group under 20, healthy" or "x, x, with COVID-19"
 def build_clip_prompt(row):
