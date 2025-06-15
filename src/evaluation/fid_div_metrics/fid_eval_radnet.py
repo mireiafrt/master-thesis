@@ -80,7 +80,7 @@ print("Filtered data...")
 
 # Sample a subset instead of full data if it is none (random, to match the sample size that was used for the synthetic data)
 if sample_size is not None:
-    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+    df_real = df_real.sample(n=sample_size, random_state=42).reset_index(drop=True)
     print(f"Subsampled to {sample_size} random rows with seed 42.")
 
 # Create data dictionaries

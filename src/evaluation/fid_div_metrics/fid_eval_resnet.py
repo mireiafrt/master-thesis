@@ -50,7 +50,7 @@ print("Filtered data...")
 
 # Sample a subset instead of full data if it is none (random, to match the sample size that was used for the synthetic data)
 if sample_size is not None:
-    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+    df_real = df_real.sample(n=sample_size, random_state=42).reset_index(drop=True)
     print(f"Subsampled to {sample_size} random rows with seed 42.")
 
 # Create data dictionaries
@@ -76,9 +76,9 @@ common_transforms = transforms.Compose([
 ])
 
 rea_ds = Dataset(data=real_data, transform=common_transforms)
-real_loader = DataLoader(rea_ds, batch_size=16, shuffle=False, num_workers=4)
+real_loader = DataLoader(rea_ds, batch_size=8, shuffle=False, num_workers=4)
 syn_ds = Dataset(data=syn_data, transform=common_transforms)
-syn_loader = DataLoader(syn_ds, batch_size=16, shuffle=False, num_workers=4)
+syn_loader = DataLoader(syn_ds, batch_size=8, shuffle=False, num_workers=4)
 
 # prepare model to impute image features
 device = torch.device("cuda")
@@ -99,12 +99,13 @@ for step, (real_batch, syn_batch) in tqdm(enumerate(zip(real_loader, syn_loader)
     # Get the syn images
     syn_images = syn_batch["image"].to(device)
 
-    # Get the features for the real data
-    real_eval_feats = model(real_images)
-    real_features.append(real_eval_feats)
+    # Get the features
+    with torch.no_grad():
+        real_eval_feats = model(real_images)
+        synth_eval_feats = model(syn_images)
 
-    # Get the features for the synthetic data
-    synth_eval_feats = model(syn_images)
+    # Store features in arrays
+    real_features.append(real_eval_feats)
     synth_features.append(synth_eval_feats)
 
 ####### COMPUTE FID #######

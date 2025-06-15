@@ -48,7 +48,7 @@ print("Filtered data...")
 
 # Sample a subset instead of full data if it is none (random, to match the sample size that was used for the synthetic data)
 if sample_size is not None:
-    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+    df_real = df_real.sample(n=sample_size, random_state=42).reset_index(drop=True)
     print(f"Subsampled to {sample_size} random rows with seed 42.")
 
 # Create data dictionaries
@@ -69,9 +69,9 @@ common_transforms = transforms.Compose([
 
 # Create Datasets and Loaders
 real_ds = Dataset(data=real_data, transform=common_transforms)
-real_loader = DataLoader(real_ds, batch_size=16, shuffle=False, num_workers=4)
+real_loader = DataLoader(real_ds, batch_size=8, shuffle=False, num_workers=4)
 syn_ds = Dataset(data=syn_data, transform=common_transforms)
-syn_loader = DataLoader(syn_ds, batch_size=16, shuffle=False, num_workers=4)
+syn_loader = DataLoader(syn_ds, batch_size=8, shuffle=False, num_workers=4)
 
 # prepare model to impute image features
 device = torch.device("cuda")
