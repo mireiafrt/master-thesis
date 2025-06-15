@@ -78,10 +78,10 @@ for key, value in filters.items():
 df_real = df_real.reset_index(drop=True)
 print("Filtered data...")
 
-# Sample a subset instead of full data if it is none (to match the sample size that was used for the synthetic data)
+# Sample a subset instead of full data if it is none (random, to match the sample size that was used for the synthetic data)
 if sample_size is not None:
-    df_real = df_real.iloc[:sample_size].reset_index(drop=True)
-    print(f"Subsampled to {sample_size} rows.")
+    df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
+    print(f"Subsampled to {sample_size} random rows with seed 42.")
 
 # Create data dictionaries
 real_data = [{"image": row[columns["real_img_path"]]} for _, row in df_real.iterrows()]
