@@ -273,7 +273,7 @@ writer_val = SummaryWriter(log_dir=writer_val_path)
 
 # keep track of best metrics
 best_fid = np.inf # for fid, the smaller the better
-best_ms_ssim = 0 # for ms-ssim it goes from 0 to 1, 1 being the best
+best_ms_ssim = 0 # for ms-ssim it goes from 0 to 1, 1 being the best, but actually closer to 0 the more diverse, so we want this
 
 # === Training loop ===
 for epoch in range(n_epochs):
@@ -398,7 +398,7 @@ for epoch in range(n_epochs):
         print(f"epoch {epoch} MS-SSIM: {ms_ssim_score} & FID: {fid_score:.4f}")
 
         # compare fid and ms_ssim to best scores to see if this is the best epoch yet
-        if fid_score <= best_fid and ms_ssim_score >= best_ms_ssim:
+        if fid_score <= best_fid and ms_ssim_score <= best_ms_ssim:
             best_fid = fid_score
             best_ms_ssim = ms_ssim_score
             # save model
