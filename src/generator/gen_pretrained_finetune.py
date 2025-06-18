@@ -273,7 +273,7 @@ writer_val = SummaryWriter(log_dir=writer_val_path)
 
 # keep track of best metrics
 best_fid = np.inf # for fid, the smaller the better
-best_ms_ssim = 0 # for ms-ssim it goes from 0 to 1, 1 being the best, but actually closer to 0 the more diverse, so we want this
+best_ms_ssim = 1 # for ms-ssim it goes from 0 to 1, 1 being the best, but actually closer to 0 the more diverse, so we want this
 
 # === Training loop ===
 for epoch in range(n_epochs):
