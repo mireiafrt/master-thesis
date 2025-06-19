@@ -1,16 +1,17 @@
 paths:
-  metadata_csv: '/home/coder/project/covidxct/proc_slices_metadata.csv'
+  metadata_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
   autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
-  generator_path: "models/generator/mult_generators/gen_2"
-  model_name: "final_finetuned_generator.pth"
-  imgs_output: "data/syn_test/mult_gen/gen_2_syn"
-  result_csv: 'data/syn_test/mult_gen/gen_2_syn.csv'
+  generator_path: "models/generator/generator"
+  model_name: "best_finetuned_generator.pth"
+  imgs_output: "data/best_gen/syn_2"
+  result_csv: 'data/best_gen/syn_2.csv'
 
 num_inference_steps: 100
 guidance_scale: 7
-batch_size: 16
+batch_size: 64
+seed: 24
 
-sample_size: 50   # if null, sample the whole size of the conditioning
+sample_size: 1000   # if null, sample the whole size of the conditioning
 
 conditioning:       # use null for no filter
   split: "test"      # val, ground_truth, test, train

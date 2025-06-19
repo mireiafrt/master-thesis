@@ -18,9 +18,6 @@ from generative.networks.schedulers import DDIMScheduler, DDPMScheduler
 from transformers import CLIPTextModel, CLIPTokenizer
 
 
-# set global seed
-set_determinism(42)
-
 # Load config
 with open("config/generator/generator_sample_batch.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -29,8 +26,12 @@ paths = config["paths"]
 num_inference_steps = config["num_inference_steps"]
 guidance_scale = config["guidance_scale"]
 batch_size = config["batch_size"]
+seed = config["seed"]
 sample_size = config["sample_size"]
 filters = config["conditioning"]
+
+# set global seed using config seed parameter
+set_determinism(seed)
 
 # load scale factor from paths
 scale_dict = torch.load(os.path.join(paths["generator_path"], "scale.pt"))
