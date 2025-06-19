@@ -1,4 +1,6 @@
 # Ignore the entire data folder
 data/
+models/
+logs/
 env/
 .venv/
