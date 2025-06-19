@@ -147,7 +147,7 @@ def generate_images_from_reports(df: pd.DataFrame, batch_size: int = 4) -> pd.Da
         # ------------------------------------------------------------------
         # 3  DDIM sampling loop (vectorised over batch)
         # ------------------------------------------------------------------
-        for t in scheduler.timesteps.to(device):
+        for t in tqdm(scheduler.timesteps.to(device), desc="Sampling"):
             noise_in  = torch.cat([latents]*2)               # (2B, 3, H, W)
             with torch.no_grad(), torch.cuda.amp.autocast(dtype is torch.float16):
                 model_output = diffusion(
