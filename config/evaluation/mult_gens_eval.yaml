@@ -1,0 +1,19 @@
+paths:
+  real_imgs_csv: '/home/coder/project/covidxct/proc_slices_metadata.csv'
+  syn_1_path: 'data/syn_test/mult_gen/gen_1_syn.csv'
+  syn_2_path: 'data/syn_test/mult_gen/gen_2_syn.csv'
+  syn_3_path: 'data/syn_test/mult_gen/gen_3_syn.csv'
+  syn_4_path: 'data/syn_test/mult_gen/gen_4_syn.csv'
+  syn_5_path: 'data/syn_test/mult_gen/gen_5_syn.csv'
+
+columns:
+  real_img_path: "image_path"
+  syn_img_path: "syn_path"
+
+sample_size: 1000
+
+conditioning:       # use null for no filter
+  split: "test"      # val, ground_truth, test, train
+  sex: null         # F or M
+  age_group: null   # Under 20, 20-40, 40-60, 60-80, Over-80
+  label: null       # 0 or 1
