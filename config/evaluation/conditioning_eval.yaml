@@ -1,0 +1,23 @@
+paths:
+  metadata_csv: "/home/coder/project/covidxct/slice_level_metadata.csv"
+  image_column: "image_path"
+
+labeling:
+  attribute_columns: ["sex", "age_group", "label"]  # ["sex"] or ["age_group"] or ["label"] (diagnosis), or ["sex", "age_group"] etc.
+  normalize_labels: True  # whether to encode string labels to integers
+
+training:
+  num_epochs: 20
+  batch_size: 128
+  learning_rate: 0.001
+  val_interval: 1
+
+split:
+  train_size: 0.8
+  val_size: 0.1
+  test_size: 0.1
+  stratify: True
+
+output:
+  results_dir: "results/covid_experiments"
+  save_models: True # needs to be True

@@ -1,1 +1,1 @@
-# train the same classifier, but with different target column or columns
+# train the same classifier, but with different target column or columnsc(sex, age_group, label=diagnosis)
