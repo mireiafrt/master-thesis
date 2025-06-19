@@ -1,0 +1,19 @@
+paths:
+  metadata_csv: '/home/coder/project/covidxct/proc_slices_metadata.csv'
+  autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
+  generator_path: "models/generator/mult_generators/gen_2"
+  model_name: "final_finetuned_generator.pth"
+  imgs_output: "data/syn_test/mult_gen/gen_2_syn"
+  result_csv: 'data/syn_test/mult_gen/gen_2_syn.csv'
+
+num_inference_steps: 100
+guidance_scale: 7
+batch_size: 16
+
+sample_size: 50   # if null, sample the whole size of the conditioning
+
+conditioning:       # use null for no filter
+  split: "test"      # val, ground_truth, test, train
+  sex: null         # F or M
+  age_group: null   # Under 20, 20-40, 40-60, 60-80, Over-80
+  label: null       # 0 or 1
