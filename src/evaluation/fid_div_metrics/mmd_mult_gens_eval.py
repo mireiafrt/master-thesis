@@ -13,7 +13,7 @@ import torch
 from monai import transforms
 from monai.data import DataLoader, Dataset
 from monai.utils import set_determinism
-from generative.metrics import MultiScaleSSIMMetric, SSIMMetric
+from generative.metrics import MMDMetric
 
 
 # set global seed
