@@ -25,36 +25,20 @@ with open("config/evaluation/ms_ssim_config.yaml", "r") as f:
 
 paths = config["paths"]
 columns = config["columns"]
-sample_size = config["sample_size"]
-filters = config["conditioning"]
 
 ########## PREPARE PROMPTS and RESULT CSV ##########
 print("Reading data...")
-# Read real data
-df_real = pd.read_csv(paths["real_imgs_csv"])
-df_real = df_real[df_real["use"] == True]
-# Read synthetic data
-df_syn = pd.read_csv(paths["syn_imgs_csv"])
-
-# filter metadata based on the conditioning (has to match the conditioning of the synthetic data)
-print("Filters:", filters)
-df_real = df_real.copy()
-for key, value in filters.items():
-    if value is not None:
-        df_real = df_real[df_real[key] == value]
-df_real = df_real.reset_index(drop=True)
-print("Filtered data...")
-
-# Sample a subset instead of full data if it is none (random, to match the sample size that was used for the synthetic data)
-if sample_size is not None:
-    df_real = df_real.sample(n=sample_size, random_state=42).reset_index(drop=True)
-    print(f"Subsampled to {sample_size} random rows with seed 42.")
+# Read synthetic data 1
+df_syn_1 = pd.read_csv(paths["syn_imgs_1_csv"])
+# Read synthetic data 2
+df_syn_2 = pd.read_csv(paths["syn_imgs_2_csv"])
 
 # Create data dictionaries
-real_data = [{"image": row[columns["real_img_path"]]} for _, row in df_real.iterrows()]
-syn_data = [{"image": row[columns["syn_img_path"]]} for _, row in df_syn.iterrows()]
-print(f"Size of real data: {len(real_data)}")
-print(f"Size of syn data: {len(syn_data)}")
+syn_data_1 = [{"image": row[columns["syn_img_path"]]} for _, row in df_syn_1.iterrows()]
+syn_data_2 = [{"image": row[columns["syn_img_path"]]} for _, row in df_syn_2.iterrows()]
+print(f"Size of syn data 1: {len(syn_data_1)}")
+print(f"Size of syn data 2: {len(syn_data_2)}")
+assert len(df_syn_1) == len(df_syn_2), "Synthetic datasets must have the same length for pairwise comparison"
 
 ###### TRANSFORMS FOR DATA ######
 common_transforms = transforms.Compose([
@@ -64,10 +48,10 @@ common_transforms = transforms.Compose([
     transforms.Resized(keys=["image"], spatial_size=(256, 256)),
 ])
 
-rea_ds = Dataset(data=real_data, transform=common_transforms)
-real_loader = DataLoader(rea_ds, batch_size=16, shuffle=False, num_workers=4)
-syn_ds = Dataset(data=syn_data, transform=common_transforms)
-syn_loader = DataLoader(syn_ds, batch_size=16, shuffle=False, num_workers=4)
+syn_ds_1 = Dataset(data=syn_data_1, transform=common_transforms)
+syn_loader_1 = DataLoader(syn_ds_1, batch_size=16, shuffle=False, num_workers=4)
+syn_ds_2 = Dataset(data=syn_data_2, transform=common_transforms)
+syn_loader_2 = DataLoader(syn_ds_2, batch_size=16, shuffle=False, num_workers=4)
 
 # prepare model to impute image features
 device = torch.device("cuda")
@@ -79,15 +63,15 @@ ssim_recon_scores = []
 ms_ssim = MultiScaleSSIMMetric(spatial_dims=2, data_range=1.0, kernel_size=11) # changed kernel size to 11 (standard), MONAI was using 4 (for small images)
 ssim = SSIMMetric(spatial_dims=2, data_range=1.0, kernel_size=11) # changed kernel size to 11 (standard), MONAI was using 4 (for small images)
 
-for step, (real_batch, syn_batch) in tqdm(enumerate(zip(real_loader, syn_loader)), total=len(real_loader)):
+for step, (syn_batch_1, syn_batch_2) in tqdm(enumerate(zip(syn_loader_1, syn_loader_2)), total=len(syn_loader_1)):
     # Get the real images
-    real_images = real_batch["image"].to(device)
+    syn_imgs_1 = syn_batch_1["image"].to(device)
     # Get the syn images
-    syn_images = syn_batch["image"].to(device)
+    syn_imgs_2 = syn_batch_2["image"].to(device)
     
     # compute metric
-    ms_ssim_recon_scores.append(ms_ssim(real_images, syn_images))
-    ssim_recon_scores.append(ssim(real_images, syn_images))
+    ms_ssim_recon_scores.append(ms_ssim(syn_imgs_1, syn_imgs_2))
+    ssim_recon_scores.append(ssim(syn_imgs_1, syn_imgs_2))
 
 ms_ssim_recon_scores = torch.cat(ms_ssim_recon_scores, dim=0)
 ssim_recon_scores = torch.cat(ssim_recon_scores, dim=0)
