@@ -1,15 +1,15 @@
 paths:
   metadata_csv: '/home/coder/project/covidxct/proc_slices_metadata.csv'
   autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
-  generator_path: "models/generator/generator/final_finetuned_generator.pth"
-  imgs_output: "data/results/experiment_final/syn_data"
-  result_csv: 'data/results/experiment_final/syn_data.csv'
+  generator_path: "models/generator/mult_generators/gen_2/final_finetuned_generator.pth"
+  imgs_output: "data/results/new_exp/gen_2_syn"
+  result_csv: 'data/results/new_exp/gen_2_syn.csv'
 
 num_inference_steps: 100
 guidance_scale: 7
-scale_factor: 0.9578254818916321
+scale_factor: 0.9604068398475647 # should adapt it depending on the script trained
 
-sample_size: 1000
+sample_size: 1000   # if null, sample the whole size of the conditioning
 
 conditioning:       # use null for no filter
   split: "test"      # val, ground_truth, test, train
