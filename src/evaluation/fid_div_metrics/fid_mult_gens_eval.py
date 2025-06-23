@@ -8,6 +8,7 @@ from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
 import matplotlib.pyplot as plt
+from scipy.stats import t
 
 import torch
 from torchvision.models import densenet121, inception_v3, resnet50
@@ -60,7 +61,6 @@ with open("config/evaluation/mult_gens_eval.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 paths = config["paths"]
-syn_paths = config["exp_names"]
 columns = config["columns"]
 sample_size = config["sample_size"]
 filters = config["conditioning"]
@@ -144,12 +144,7 @@ all_real_loaders = {
 print(f"Size of real data: {len(real_data)}")
 
 # create syn data loaderS
-all_syn_loaders = {
-    "resnet": [],
-    "densenet": [],
-    "inception": [],
-    "radnet": [],
-}
+all_syn_loaders = {"resnet": [], "densenet": [], "inception": [], "radnet": []}
 for i in range(len(syn_paths)):
     df_syn = pd.read_csv(syn_paths[i])
     syn_data = [{"image": row[columns["syn_img_path"]]} for _, row in df_syn.iterrows()]
@@ -240,11 +235,13 @@ def mean_ci(tensor_list):
     """
     # stack: (K, N_images) → per-set means: (K,)
     per_set_mean = torch.stack([t.mean() for t in tensor_list])
+    print(f"Means per set: {per_set_mean}")
     mean = per_set_mean.mean()
     sem  = per_set_mean.std(unbiased=False) / (len(tensor_list) ** 0.5)
     # 95 % two-sided t-interval with df = K-1
-    t95 = torch.distributions.studentT.StudentT(df=len(tensor_list)-1).icdf(torch.tensor(0.975))
-    ci  = t95 * sem
+    df = len(tensor_list) - 1
+    t95 = t.ppf(0.975, df)  
+    ci = t95 * sem
     return mean.item(), ci.item()
 
 # calculate CIs for each metric

@@ -8,6 +8,7 @@ from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
 import matplotlib.pyplot as plt
+from scipy.stats import t
 
 import torch
 from monai import transforms
@@ -24,7 +25,6 @@ with open("config/evaluation/mult_gens_eval.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 paths = config["paths"]
-syn_paths = config["exp_names"]
 columns = config["columns"]
 sample_size = config["sample_size"]
 filters = config["conditioning"]
@@ -80,7 +80,7 @@ for i in range(0, len(syn_paths)):
 device = torch.device("cuda")
 
 # metric init and array to store for each syntehtic set
-mmd_sets = []
+mmd_scores_per_set = [] # each Tensor in the array stores all MMD scores per set
 mmd = MMDMetric()
 
 # help function per syntehtic set
@@ -91,15 +91,17 @@ def compute_pair_metrics(real_loader, syn_loader, mmd, device):
         real = real_batch["image"].to(device)
         syn  = syn_batch["image"].to(device)
 
-        mmd_vals.append(mmd(real, syn).cpu()) # (B,)
+        # compute metric for the batch
+        mmd_vals.append(mmd(real, syn))
 
-    mmd_vals   = torch.cat(mmd_vals)    # (N_images,)
+    # stack and compute mean
+    mmd_vals = torch.stack(mmd_vals)    # (N_images,)
     return mmd_vals
 
 # compute the metrics for each synthetic set (loader)
 for syn_loader in syn_loaders:
     mmd_vals = compute_pair_metrics(real_loader, syn_loader,mmd, device)
-    mmd_sets.append(mmd_vals)
+    mmd_scores_per_set.append(mmd_vals) # store Tensor scores of the set
 
 # function to calculate confidence intervals 
 def mean_ci(tensor_list):
@@ -108,14 +110,16 @@ def mean_ci(tensor_list):
     Each tensor in the list has shape (N_images,).
     """
     # stack: (K, N_images) → per-set means: (K,)
-    per_set_mean = torch.stack([t.mean() for t in tensor_list])
+    per_set_mean = torch.stack([t.mean() for t in tensor_list]) # compute the mean of each set 
+    print(f"Means per set: {per_set_mean}")
     mean = per_set_mean.mean()
     sem  = per_set_mean.std(unbiased=False) / (len(tensor_list) ** 0.5)
     # 95 % two-sided t-interval with df = K-1
-    t95 = torch.distributions.studentT.StudentT(df=len(tensor_list)-1).icdf(torch.tensor(0.975))
-    ci  = t95 * sem
+    df = len(tensor_list) - 1
+    t95 = t.ppf(0.975, df)  
+    ci = t95 * sem
     return mean.item(), ci.item()
 
 # calculate intervsals 
-mmd_mean, mmd_ci   = mean_ci(mmd_sets)
+mmd_mean, mmd_ci   = mean_ci(mmd_scores_per_set)
 print(f"MMD : {mmd_mean:.6f} ± {mmd_ci:.6f}  (95 % CI, n={len(syn_paths)})")
