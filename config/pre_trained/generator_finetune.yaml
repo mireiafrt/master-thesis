@@ -1,9 +1,9 @@
 paths:
-  metadata_csv: "/home/coder/project/covidxct/proc_slices_metadata.csv"
-  writers_outputs: 'logs/finetune_gen'
+  metadata_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
+  writers_outputs: 'logs/finetune_mult_gen/gen_3'
   pretrained_model_path: 'models/pre_trained/diffusion_model.pth'
   autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
-  model_output: "models/generator/generator"
+  model_output: "models/generator/mult_generators/gen_3"
 
 columns:
   label: "label"
@@ -12,8 +12,8 @@ columns:
   split_col: "split"
 
 training:
-  batch_size: 64
-  num_epochs: 200
-  eval_freq: 10
+  batch_size: 32
+  num_epochs: 80  #200 or 80?
+  eval_freq: 10 #10
   emb_size: 1024
   guidance_scale: 7
