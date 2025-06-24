@@ -184,8 +184,8 @@ def train_model(train_df, val_df, syn_set_num, num_classes):
             best_auc = auc
             best_metrics = {
                 "train_loss": total_loss,
-                "f1": f1, "acc": acc, "recall": recall,
-                "precision": precision, "auc": auc
+                "val_f1": f1, "val_acc": acc, "val_recall": recall,
+                "val_precision": precision, "val_auc": auc
             }
             # save state of model as the best state
             best_model_state = model.state_dict()
@@ -201,7 +201,7 @@ def evaluate_on_test(best_model_state, test_df, num_classes):
     model.eval()
 
     test_ds = Dataset(data=build_monai_data(test_df, columns["real_img_path"]), transform=get_eval_transform())
-    test_loader = DataLoader(test_ds, batch_size=1, num_workers=2)
+    test_loader = DataLoader(test_ds, batch_size=training["batch_size"], num_workers=2) # changed batch size from 1 to param batch size
 
     post_pred = Activations(softmax=True)
     post_target = AsDiscrete(to_onehot=num_classes)
