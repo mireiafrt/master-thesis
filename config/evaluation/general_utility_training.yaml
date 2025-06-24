@@ -12,6 +12,8 @@ columns:
   target: "label"
   split_col: "split"
 
+subgroups: False
+
 training:
   num_epochs: 20
   batch_size: 128
@@ -23,5 +25,10 @@ split:
   val_size: 0.1
 
 output:
-  results_dir: "results/utility_eval"
-  model_output: "models/utility_eval/classifier_trained_real_holdout.pth"
+  results_dir: "results/utility_train"
+  real_model_output: "models/utility_train/classifier_trained_real_test.pth"
+  syn_model_output_1: "models/utility_train/classifier_trained_syn_1.pth"
+  syn_model_output_2: "models/utility_train/classifier_trained_syn_2.pth"
+  syn_model_output_3: "models/utility_train/classifier_trained_syn_3.pth"
+  syn_model_output_4: "models/utility_train/classifier_trained_syn_4.pth"
+  syn_model_output_5: "models/utility_train/classifier_trained_syn_5.pth"

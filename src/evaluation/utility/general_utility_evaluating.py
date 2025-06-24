@@ -115,8 +115,8 @@ def train_model(train_df, val_df):
     post_target = Compose([AsDiscrete(to_onehot=2)])
     post_discrete = AsDiscrete(argmax=True, to_onehot=2)
 
-    train_ds = Dataset(data=build_monai_data(train_df, columns["real_img_path"]), transform=get_train_transform())
-    val_ds = Dataset(data=build_monai_data(val_df, columns["real_img_path"]), transform=get_eval_transform())
+    train_ds = Dataset(data=build_monai_data(train_df, columns["real_img_path"], columns["target"]), transform=get_train_transform())
+    val_ds = Dataset(data=build_monai_data(val_df, columns["real_img_path"], columns["target"]), transform=get_eval_transform())
 
     train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=False, num_workers=2)
@@ -190,7 +190,7 @@ def evaluate_on_test(best_model_state, test_df, image_path_col):
     model.load_state_dict(best_model_state)
     model.eval()
 
-    test_ds = Dataset(data=build_monai_data(test_df, image_path_col), transform=get_eval_transform())
+    test_ds = Dataset(data=build_monai_data(test_df, image_path_col, columns["target"]), transform=get_eval_transform())
     test_loader = DataLoader(test_ds, batch_size=1, num_workers=2)
 
     post_pred = Activations(softmax=True)
@@ -231,6 +231,10 @@ def evaluate_on_test(best_model_state, test_df, image_path_col):
 # first train a model with the real hold-out data (train_df and val_df)
 print("Training model")
 train_metrics, best_model_state = train_model(train_df, val_df)
+# save the model for possible future uses
+os.makedirs(os.path.dirname(output["model_output"]), exist_ok=True)
+torch.save(best_model_state, output["model_output"])
+print("Saved new best model")
 
 # FIRST EVAL: evaluate on real test set and store reults in writer (SYN SET 0 to indicate REAL)
 print("Evaluating on REAL test set")
