@@ -106,7 +106,7 @@ def train_model(train_df, val_df):
     # use pretrained ImageNet weights
     model = DenseNet121(spatial_dims=2, in_channels=3, out_channels=2, pretrained=True).to(device)
 
-    loss_fn = FocalLoss(to_onehot_y=True, use_softmax=True)
+    loss_fn = FocalLoss(to_onehot_y=True, use_softmax=True, gamma=2.0)
     optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
