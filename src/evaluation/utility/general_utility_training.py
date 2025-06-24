@@ -241,7 +241,7 @@ writer.writerow({"syn_set": 0, **train_metrics, **test_metrics})
 log_f.flush()
 
 # SECOND EXPERIMENT: Train on synthetic sets and EVAL on REAL (hold-out)
-model_output_paths = []
+model_output_paths = [output["syn_model_output_1"], output["syn_model_output_2"], output["syn_model_output_3"], output["syn_model_output_4"], output["syn_model_output_5"]]
 for i in range(0, len(syn_paths)):
     print(f"Training model on SYN set {i+1}")
     syn_df = pd.read_csv(syn_paths[i])
