@@ -1,10 +1,18 @@
 paths:
-  metadata_csv: "/home/coder/project/covidxct/slice_level_metadata.csv"
-  image_column: "image_path"
+  real_imgs_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
+  syn_1_path: 'data/syn_test/gen_1.csv'
+  syn_2_path: 'data/syn_test/gen_2.csv'
+  syn_3_path: 'data/syn_test/gen_3.csv'
+  syn_4_path: 'data/syn_test/gen_4.csv'
+  syn_5_path: 'data/syn_test/gen_5.csv'
 
-labeling:
-  attribute_columns: ["sex", "age_group", "label"]  # ["sex"] or ["age_group"] or ["label"] (diagnosis), or ["sex", "age_group"] etc.
-  normalize_labels: True  # whether to encode string labels to integers
+columns:
+  real_img_path: "image_path"
+  syn_img_path: "syn_path"
+
+target:
+  attribute_columns: ["sex"]  # ["sex"] or ["age_group"] or ["label"] (diagnosis), or ["sex", "age_group"] etc.
+  normalize_target: True  # whether to encode string target to integers
 
 training:
   num_epochs: 20
@@ -13,11 +21,9 @@ training:
   val_interval: 1
 
 split:
-  train_size: 0.8
+  train_size: 0.9
   val_size: 0.1
-  test_size: 0.1
   stratify: True
 
 output:
-  results_dir: "results/covid_experiments"
-  save_models: True # needs to be True
+  results_dir: "results/conditioning_eval"
