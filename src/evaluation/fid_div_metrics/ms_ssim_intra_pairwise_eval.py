@@ -28,8 +28,19 @@ prompt_column = "report"
 
 # Load and group data by prompt
 print("Reading and grouping data...")
-df_syn = pd.read_csv(paths["syn_imgs_1_csv"])
-grouped = df_syn.groupby(prompt_column)
+df = pd.read_csv(paths["imgs_csv"])
+# For test
+df = df[(df["use"] == True)&(df["split"]=="test")]
+# generate report
+def build_clip_prompt(row):
+    sex_term = "female" if row["sex"] == "F" else "male"
+    diagnosis_text = "healthy" if row["label"] == 0 else "with COVID-19"
+    return f"A {sex_term} patient in the {row['age_group']} age group, {diagnosis_text}."
+df["report"] = df.apply(build_clip_prompt, axis=1)
+print("Reports created ...")
+
+# group by prompt
+grouped = df.groupby(prompt_column)
 
 # Define common image transform
 common_transforms = transforms.Compose([
@@ -50,20 +61,26 @@ prompt_ssim_means = []
 
 print("Computing per-prompt pairwise MS-SSIM and SSIM...")
 for prompt, group_df in tqdm(grouped, desc="By Prompt", total=len(grouped)):
+
     if len(group_df) < 2:
         print(f"Can't compute pairwise scores for <2 images. PROMPT: {prompt}")
         continue
 
+    # SAMPLE 30 if available
+    if len(group_df) >= 30:
+        print("Sampling 30 images per prompt for intra-prompt pairwise comparison")
+        group_df = group_df.sample(n=30, random_state=42)  # fixed seed for reproducibility
+
     # Build data dict for this group
-    syn_data = [{"image": row[columns["syn_img_path"]]} for _, row in group_df.iterrows()]
+    data = [{"image": row[columns["img_path"]]} for _, row in group_df.iterrows()]
 
     # Build dataset and loader
-    syn_ds = Dataset(data=syn_data, transform=common_transforms)
-    syn_loader = DataLoader(syn_ds, batch_size=1, shuffle=False, num_workers=4)
+    ds = Dataset(data=data, transform=common_transforms)
+    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=4)
 
     # Cache images
     image_list = []
-    for batch in syn_loader:
+    for batch in loader:
         image = batch["image"][0]  # shape: [1, H, W]
         image_list.append(image)
 

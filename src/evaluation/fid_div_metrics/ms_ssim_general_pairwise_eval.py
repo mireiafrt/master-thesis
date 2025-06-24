@@ -8,6 +8,7 @@ from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 
 import torch
 from monai import transforms
@@ -28,9 +29,24 @@ columns = config["columns"]
 
 ########## PREPARE DATA ##########
 print("Reading data...")
-df_syn = pd.read_csv(paths["syn_imgs_1_csv"])
-syn_data = [{"image": row[columns["syn_img_path"]]} for _, row in df_syn.iterrows()]
-print(f"Size of syn data: {len(syn_data)}")
+df = pd.read_csv(paths["imgs_csv"])
+# For test
+df = df[(df["use"] == True)&(df["split"]=="test")]
+# generate report
+def build_clip_prompt(row):
+    sex_term = "female" if row["sex"] == "F" else "male"
+    diagnosis_text = "healthy" if row["label"] == 0 else "with COVID-19"
+    return f"A {sex_term} patient in the {row['age_group']} age group, {diagnosis_text}."
+df["report"] = df.apply(build_clip_prompt, axis=1)
+print("Reports created ...")
+
+# Do stratified sampling if dataset has more than 125 images
+if len(df) > 125:
+    print("Stratified sampling on prompt to 125 images...")
+    df, _ = train_test_split(df, train_size=125, stratify=df["report"], random_state=42)
+
+data = [{"image": row[columns["img_path"]]} for _, row in df.iterrows()]
+print(f"Size of syn data: {len(data)}")
 
 ###### TRANSFORMS ######
 common_transforms = transforms.Compose([
@@ -40,13 +56,13 @@ common_transforms = transforms.Compose([
     transforms.Resized(keys=["image"], spatial_size=(256, 256)),
 ])
 
-syn_ds = Dataset(data=syn_data, transform=common_transforms)
-syn_loader = DataLoader(syn_ds, batch_size=1, shuffle=False, num_workers=4)
+ds = Dataset(data=data, transform=common_transforms)
+loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=4)
 
 ###### LOAD IMAGES TO MEMORY ######
 print("Caching images to memory...")
 image_list = []
-for batch in tqdm(syn_loader, desc="Caching"):
+for batch in tqdm(loader, desc="Caching"):
     image = batch["image"][0]  # shape: [1, H, W]
     image_list.append(image)
 

@@ -1,6 +1,5 @@
 paths:
-  syn_imgs_1_csv: 'data/final_gen/syn_1.csv'
-  syn_imgs_2_csv: 'data/final_gen/syn_2.csv'
+  imgs_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
 
 columns:
-  syn_img_path: "syn_path"
+  img_path: "image_path"
