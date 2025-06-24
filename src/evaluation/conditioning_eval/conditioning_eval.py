@@ -211,7 +211,7 @@ def evaluate_on_test(best_model_state, test_df, num_classes):
     y_pred = torch.tensor([], dtype=torch.float32, device=device)
     y = torch.tensor([], dtype=torch.long, device=device)
     with torch.no_grad():
-        for batch in test_loader:
+        for batch in tqdm(test_loader, desc="Evaluating"):
             x = batch["img"].to(device)
             targets = batch["target"].to(device)
             outputs = model(x)
