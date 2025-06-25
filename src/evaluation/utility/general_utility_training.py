@@ -268,7 +268,7 @@ def mean_ci(results_array):
     Return mean and 95 % CI across sets.
     """
     mean = results_array.mean()
-    sem  = results_array.std(unbiased=False) / (len(results_array) ** 0.5)
+    sem = results_array.std(ddof=0) / np.sqrt(len(results_array))
     # 95 % two-sided t-interval with df = K-1
     df = len(results_array) - 1
     t95 = t.ppf(0.975, df)  
