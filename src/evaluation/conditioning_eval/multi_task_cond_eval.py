@@ -344,7 +344,8 @@ for i in range(0, len(syn_paths)):
             syn_df[col] = syn_df[col].astype("category").cat.codes
 
     # split syn_df into train-val
-    train_df, val_df = train_test_split(syn_df, train_size=split["train_size"], stratify=syn_df["target"], random_state=42)
+    syn_df["stratify_key"] = syn_df[target_cols].astype(str).agg("_".join, axis=1)
+    train_df, val_df = train_test_split(syn_df, train_size=split["train_size"], stratify=syn_df["stratify_key"], random_state=42)
 
     # train the model on the syntehtic set
     train_metrics, best_model_state = train_model(train_df, val_df, syn_set_num=i+1, num_classes_dict=num_classes_dict)
