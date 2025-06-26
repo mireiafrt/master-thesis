@@ -1,9 +1,9 @@
 paths:
   metadata_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
-  writers_outputs: 'logs/finetune_mult_gen/gen_3'
+  writers_outputs: 'logs/finetune_medvae/gen_1'
   pretrained_model_path: 'models/pre_trained/diffusion_model.pth'
   autoencoder_path: 'models/generator/autoencoder/finetuned_autoencoder.pth'
-  model_output: "models/generator/mult_generators/gen_3"
+  model_output: "models/generator/medvae_generators/gen_1"
 
 columns:
   label: "label"
