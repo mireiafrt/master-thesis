@@ -14,7 +14,7 @@ from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeInte
 from monai.losses import FocalLoss
 from monai.networks.nets import DenseNet121
 from monai.metrics import ROCAUCMetric
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report
 from torch.utils.data import DataLoader
 import random
 from scipy.stats import t
@@ -234,6 +234,11 @@ def evaluate_on_test(best_model_state, test_df, num_classes):
     precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
 
     print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
+
+    print(classification_report(y_true_classes, y_pred_classes,
+        target_names=list(target_map.values()),
+        digits=4, zero_division=0
+    ))
 
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
 

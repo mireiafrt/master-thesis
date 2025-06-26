@@ -16,7 +16,7 @@ from monai.losses import FocalLoss
 from monai.utils import set_determinism
 from monai.networks.nets import DenseNet121
 from monai.metrics import ROCAUCMetric
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report
 from torch.utils.data import DataLoader
 import random
 from scipy.stats import t
@@ -220,6 +220,8 @@ def evaluate_on_test(best_model_state, test_df):
     precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
 
     print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
+    print(classification_report(y_true_classes, y_pred_classes,digits=4, zero_division=0))
+    
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
 
 # ========== Run Experiments ==========
@@ -284,7 +286,7 @@ for metric in test_metrics:
     # get results of SYN sets on the metric
     syn_metric_results = results_df[results_df['syn_set']!=0][metric].values
     # subtract real result from each synthetic result to create the difference
-    metric_difference = syn_metric_results - real_metric_result[0]
+    metric_difference = abs(syn_metric_results - real_metric_result[0])
     # calculate CI for the difference in the metric
     metric_mean, metric_ci   = mean_ci(metric_difference)
     print(f"Difference in {metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
