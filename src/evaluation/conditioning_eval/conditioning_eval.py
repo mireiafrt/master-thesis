@@ -61,10 +61,14 @@ if len(target_cols) == 1:
 else:
     test_df["target"] = test_df[target_cols].astype(str).agg("_".join, axis=1)
 
-# Encode target to integers
+# Encode target to integers and get mapping
 if normalize_target:
-    test_df["target"] = test_df["target"].astype("category").cat.codes
-target_map = dict(enumerate(test_df["target"].astype("category").cat.categories))
+    categories = test_df["target"].astype("category")
+    test_df["target"] = categories.cat.codes
+    target_map = dict(enumerate(categories.cat.categories))  # str values like "F_under 20"
+else:
+    target_map = {k: k for k in test_df["target"].unique()}
+print(target_map)
 num_classes = len(target_map)
 
 # ========== Helper Functions ==========
@@ -258,9 +262,10 @@ for i in range(0, len(syn_paths)):
     else:
         syn_df["target"] = syn_df[target_cols].astype(str).agg("_".join, axis=1)
 
-    # Encode target to integers
+    # Encode using the same target_map as test_df
     if normalize_target:
-        syn_df["target"] = syn_df["target"].astype("category").cat.codes
+        reverse_map = {v: k for k, v in target_map.items()}  # str → code
+        syn_df["target"] = syn_df["target"].map(reverse_map)
 
     # split syn_df into train-val
     train_df, val_df = train_test_split(syn_df, train_size=split["train_size"], stratify=syn_df["target"], random_state=42)

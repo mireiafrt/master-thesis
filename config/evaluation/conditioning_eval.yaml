@@ -11,7 +11,7 @@ columns:
   syn_img_path: "syn_path"
 
 target:
-  attribute_columns: ["sex"]  # ["sex"] or ["age_group"] or ["label"] (diagnosis), or ["sex", "age_group"] etc.
+  attribute_columns: ["sex", "age_group"]  # ["sex"] or ["age_group"] or ["sex", "age_group"]
   normalize_target: True  # whether to encode string target to integers
 
 training:

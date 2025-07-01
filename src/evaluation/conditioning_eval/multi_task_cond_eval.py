@@ -61,21 +61,23 @@ print(f"Size train set: {len(test_df)}")
 
 print(f"Running experiment on: {target_cols}")
 # prepare each target column as category codes encoded into integers
+# extract target class mappings before encoding
+target_maps = {}
 for col in target_cols:
+    categories = test_df[col].astype("category")
+    target_maps[col] = dict(enumerate(categories.cat.categories))
     if normalize_target:
-        test_df[col] = test_df[col].astype("category").cat.codes
-# Keep track of mapping and number of classes per target
-target_maps = {
-    col: dict(enumerate(test_df[col].astype("category").cat.categories))
-    for col in target_cols
-}
+        test_df[col] = categories.cat.codes
+print(target_maps)
 num_classes_dict = {col: len(mapping) for col, mapping in target_maps.items()}
 
 # ========== Helper Functions and Classes ==========
 class MultiTaskDenseNet(nn.Module):
     def __init__(self, num_classes_sex, num_classes_age):
         super().__init__()
-        self.backbone = DenseNet121(spatial_dims=2, in_channels=3, out_channels=None, pretrained=True).features
+        # Use out_channels=1 to avoid error, then ignore the final classifier
+        densenet = DenseNet121(spatial_dims=2, in_channels=3, out_channels=1, pretrained=True)
+        self.backbone = densenet.features
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.head_sex = nn.Linear(1024, num_classes_sex)
         self.head_age = nn.Linear(1024, num_classes_age)
@@ -341,7 +343,8 @@ for i in range(0, len(syn_paths)):
     # prepare each target column as category codes encoded into integers
     for col in target_cols:
         if normalize_target:
-            syn_df[col] = syn_df[col].astype("category").cat.codes
+            reverse_map = {v: k for k, v in target_maps[col].items()}  # str → code
+            syn_df[col] = syn_df[col].map(reverse_map)
 
     # split syn_df into train-val
     syn_df["stratify_key"] = syn_df[target_cols].astype(str).agg("_".join, axis=1)

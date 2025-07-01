@@ -64,14 +64,14 @@ group_counts = test_df.groupby(target_cols).size()
 
 print(f"Running experiment on: {target_cols}")
 # prepare each target column as category codes encoded into integers
+# extract target class mappings before encoding
+target_maps = {}
 for col in target_cols:
+    categories = test_df[col].astype("category")
+    target_maps[col] = dict(enumerate(categories.cat.categories))
     if normalize_target:
-        test_df[col] = test_df[col].astype("category").cat.codes
-# Keep track of mapping and number of classes per target
-target_maps = {
-    col: dict(enumerate(test_df[col].astype("category").cat.categories))
-    for col in target_cols
-}
+        test_df[col] = categories.cat.codes
+print(target_maps)
 num_classes_dict = {col: len(mapping) for col, mapping in target_maps.items()}
 
 # ========== Helper Functions and Classes ==========
@@ -349,7 +349,8 @@ for i in range(0, training["num_runs"]):
     # prepare each target column as category codes encoded into integers
     for col in target_cols:
         if normalize_target:
-            subset_df[col] = subset_df[col].astype("category").cat.codes
+            reverse_map = {v: k for k, v in target_maps[col].items()}  # str → code
+            subset_df[col] = subset_df[col].map(reverse_map)
 
     # split subset_df into train-val
     subset_df["stratify_key"] = subset_df[target_cols].astype(str).agg("_".join, axis=1)

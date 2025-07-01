@@ -1,7 +1,7 @@
 DEBUG: False
 
 paths:
-  metadata_csv: "/home/coder/project/covidxct/slice_level_metadata.csv"
+  metadata_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
   image_column: "image_path"
 
 labeling:
@@ -9,16 +9,16 @@ labeling:
   normalize_labels: True  # whether to encode string labels to integers
 
 training:
-  num_runs: 10
+  num_runs: 5
   num_epochs: 20
   batch_size: 128
   learning_rate: 0.001
   val_interval: 1
 
 split:
-  train_size: 0.8
+  train_size: 0.9
   val_size: 0.1
-  test_size: 0.1
+  test_size: 0
   stratify: True
 
 output:
