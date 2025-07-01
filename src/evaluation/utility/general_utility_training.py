@@ -23,7 +23,7 @@ from scipy.stats import t
 import csv
 
 # ========== Load Config ==========
-with open("config/evaluation/utility.yaml", "r") as f:
+with open("config/evaluation/general_utility_training.yaml", "r") as f:
     config = yaml.safe_load(f)
     
 paths = config["paths"]
