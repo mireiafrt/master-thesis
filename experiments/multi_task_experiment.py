@@ -78,7 +78,9 @@ num_classes_dict = {col: len(mapping) for col, mapping in target_maps.items()}
 class MultiTaskDenseNet(nn.Module):
     def __init__(self, num_classes_sex, num_classes_age):
         super().__init__()
-        self.backbone = DenseNet121(spatial_dims=2, in_channels=3, out_channels=None, pretrained=True).features
+        # Use out_channels=1 to avoid error, then ignore the final classifier
+        densenet = DenseNet121(spatial_dims=2, in_channels=3, out_channels=1, pretrained=True)
+        self.backbone = densenet.features
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.head_sex = nn.Linear(1024, num_classes_sex)
         self.head_age = nn.Linear(1024, num_classes_age)
@@ -384,9 +386,10 @@ def mean_ci(results_array):
 # read the log results file, and compute 95% CI intervals of all test metrics between the 5 runs
 test_metrics = ["test_f1_sex", "test_acc_sex", "test_auc_sex", "test_recall_sex", "test_precision_sex",
                "test_f1_age", "test_acc_age", "test_auc_age", "test_recall_age", "test_precision_age"]
+n = training["num_runs"]
 results_df = pd.read_csv(log_path)
 for metric in test_metrics:
     metric_results = results_df[metric].values
     metric_mean, metric_ci   = mean_ci(metric_results)
-    print(f"{metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={training["num_runs"]})")
+    print(f"{metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={n})")
 
