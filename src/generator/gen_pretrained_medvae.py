@@ -414,8 +414,11 @@ for epoch in range(n_epochs):
 
                 #x_hat = raw_aekl.model.decode(latent / scale_factor)
                 x_hat = medvae.model.decode(latent / scale_factor)
-                img_rgb = x_hat[0].clamp(0, 1).cpu()
-                writer_val.add_image("SAMPLE", img_rgb, step)
+                img_rgb = x_hat[0].clamp(0, 1).cpu().permute(1, 2, 0).numpy()  # [C, H, W] → [H, W, C]
+                fig = plt.figure(dpi=300)
+                plt.imshow(img_rgb)
+                plt.axis("off")
+                writer_val.add_figure("SAMPLE", fig, step)
 
         val_loss = total_losses["loss"]
         print(f"epoch {epoch} val loss: {val_loss:.4f}")
