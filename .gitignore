@@ -3,4 +3,5 @@ data/
 models/
 logs/
 env/
+results/
 .venv/
