@@ -51,7 +51,7 @@ df = pd.read_csv(paths["real_imgs_csv"])
 df = df[(df["use"] == True)]
 
 # Split according to 'split' column
-hold_out_df = df[(df[columns["split_col"]] == "train") or (df[columns["split_col"]] == "val")]
+hold_out_df = df[df[columns["split_col"]].isin(["train", "val"])]
 test_df = df[df[columns["split_col"]] == "test"]
 
 # ========== Helper Functions ==========
@@ -231,7 +231,7 @@ print("Training model on REAL test set")
 # split train_df into train-val
 train_df, val_df = train_test_split(test_df, train_size=split["train_size"], stratify=test_df[columns["target"]], random_state=42)
 # train model
-train_metrics, best_model_state = train_model(train_df, val_df)
+train_metrics, best_model_state = train_model(train_df, val_df, syn_set_num=0, image_path_col=columns["real_img_path"])
 # save the model for possible future uses
 os.makedirs(os.path.dirname(output["real_model_output"]), exist_ok=True)
 torch.save(best_model_state, output["real_model_output"])
@@ -250,13 +250,13 @@ for i in range(0, len(syn_paths)):
     # split train_df into train-val
     train_df, val_df = train_test_split(syn_df, train_size=split["train_size"], stratify=syn_df[columns["target"]], random_state=42)
     # train model
-    train_metrics, best_model_state = train_model(train_df, val_df)
+    train_metrics, best_model_state = train_model(train_df, val_df, syn_set_num=i+1, image_path_col=columns["syn_img_path"])
     # save the model for possible future uses
     os.makedirs(os.path.dirname(model_output_paths[i]), exist_ok=True)
     torch.save(best_model_state, model_output_paths[i])
     print("Saved best model")
     # Evaluate on real holdout
-    print("Evaluating on REAL HOLD-OUT")
+    print(f"Evaluating on SYN SET {i+1}")
     test_metrics = evaluate_on_test(best_model_state, hold_out_df)
     writer.writerow({"syn_set": i+1, **train_metrics, **test_metrics})
     log_f.flush()
