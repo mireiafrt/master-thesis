@@ -31,6 +31,7 @@ with open("config/evaluation/general_utility_evaluating.yaml", "r") as f:
     
 paths = config["paths"]
 columns = config["columns"]
+num_trains = config["num_trains"]
 training = config["training"]
 split = config["split"]
 output = config["output"]
@@ -39,7 +40,7 @@ syn_paths = [paths["syn_1_path"], paths["syn_2_path"], paths["syn_3_path"], path
 
 # ============== SETUP LOGGING ==============
 os.makedirs(output["results_dir"], exist_ok=True)
-csv_columns = ["syn_set", "train_loss", "val_f1", "val_acc", "val_recall", "val_precision", "val_auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
+csv_columns = ["num_train", "syn_set", "train_loss", "val_f1", "val_acc", "val_recall", "val_precision", "val_auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
 log_path = os.path.join(output["results_dir"], "general.csv")
 log_file_exists = os.path.exists(log_path)
 
@@ -108,7 +109,8 @@ def train_model(train_df, val_df):
 
     loss_fn = FocalLoss(to_onehot_y=True, use_softmax=True, gamma=2.0)
     optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
     auc_metric = ROCAUCMetric(average="macro")
     post_pred = Compose([Activations(softmax=True)])
@@ -229,29 +231,34 @@ def evaluate_on_test(best_model_state, test_df, image_path_col):
     return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
 
 # ========== Run Experiments ==========
+# train as many models as num_trains, later aggregate results accordingly
+for j in range (0, num_trains):
+    # first train a model with the real hold-out data (train_df and val_df)
+    print("Training model")
+    train_metrics, best_model_state = train_model(train_df, val_df)
+    # Create the output directory if it doesn't exist
+    os.makedirs(output["model_output"], exist_ok=True)
+    # Construct full path to save the model
+    file_name = "classifier_trained_real_HO" + str(j+1) + ".pth"
+    save_path = os.path.join(output["model_output"], file_name)
+    # Save the model
+    torch.save(best_model_state, save_path)
+    print("Saved new best model")
 
-# first train a model with the real hold-out data (train_df and val_df)
-print("Training model")
-train_metrics, best_model_state = train_model(train_df, val_df)
-# save the model for possible future uses
-os.makedirs(os.path.dirname(output["model_output"]), exist_ok=True)
-torch.save(best_model_state, output["model_output"])
-print("Saved new best model")
-
-# FIRST EVAL: evaluate on real test set and store reults in writer (SYN SET 0 to indicate REAL)
-print("Evaluating on REAL test set")
-real_test_metrics = evaluate_on_test(best_model_state, test_df, image_path_col=columns["real_img_path"])
-writer.writerow({"syn_set": 0, **train_metrics, **real_test_metrics})
-log_f.flush()
-
-# SECOND EVAL: Loop over syntehtic test sets and evaluate
-for i in range(0, len(syn_paths)):
-    print(f"Evaluating on SYN set {i+1}")
-    syn_df = pd.read_csv(syn_paths[i])
-
-    syn_test_metrics = evaluate_on_test(best_model_state, syn_df, image_path_col=columns["syn_img_path"])
-    writer.writerow({"syn_set": i+1, **train_metrics, **syn_test_metrics})
+    # FIRST EVAL: evaluate on real test set and store reults in writer (SYN SET 0 to indicate REAL)
+    print("Evaluating on REAL test set")
+    real_test_metrics = evaluate_on_test(best_model_state, test_df, image_path_col=columns["real_img_path"])
+    writer.writerow({"num_train": j+1, "syn_set": 0, **train_metrics, **real_test_metrics})
     log_f.flush()
+
+    # SECOND EVAL: Loop over syntehtic test sets and evaluate
+    for i in range(0, len(syn_paths)):
+        print(f"Evaluating on SYN set {i+1}")
+        syn_df = pd.read_csv(syn_paths[i])
+
+        syn_test_metrics = evaluate_on_test(best_model_state, syn_df, image_path_col=columns["syn_img_path"])
+        writer.writerow({"num_train": j+1, "syn_set": i+1, **train_metrics, **syn_test_metrics})
+        log_f.flush()
 
 log_f.close()
 print("\nAll runs completed and logged.")
@@ -272,13 +279,14 @@ def mean_ci(results_array):
 # read the log results file, and compute 95% CI intervals of all test metrics between the 5 synthetic set runs
 test_metrics = ["test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
 results_df = pd.read_csv(log_path)
-for metric in test_metrics:
-    # get result of REAL test on the metric
-    real_metric_result = results_df[results_df['syn_set']==0][metric].values
-    # get results of SYN sets on the metric
-    syn_metric_results = results_df[results_df['syn_set']!=0][metric].values
-    # subtract real result from each synthetic result to create the difference
-    metric_difference = abs(syn_metric_results - real_metric_result[0])
-    # calculate CI for the difference in the metric
-    metric_mean, metric_ci   = mean_ci(metric_difference)
-    print(f"Difference in {metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
+for j in range(0, num_trains):
+    for metric in test_metrics:
+        # get result of REAL test on the metric
+        real_metric_result = results_df[(results_df['num_train']==j+1)&(results_df['syn_set']==0)][metric].values
+        # get results of SYN sets on the metric
+        syn_metric_results = results_df[(results_df['num_train']==j+1)&(results_df['syn_set']!=0)][metric].values
+        # subtract real result from each synthetic result to create the difference
+        metric_difference = abs(syn_metric_results - real_metric_result[0])
+        # calculate CI for the difference in the metric
+        metric_mean, metric_ci   = mean_ci(metric_difference)
+        print(f"Difference in {metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
