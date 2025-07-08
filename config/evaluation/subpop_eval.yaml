@@ -1,0 +1,35 @@
+paths:
+  real_imgs_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
+  syn_1_path: 'data/syn_gt/gen_1.csv'
+  syn_2_path: 'data/syn_gt/gen_2.csv'
+  syn_3_path: 'data/syn_gt/gen_3.csv'
+  syn_4_path: 'data/syn_gt/gen_4.csv'
+  syn_5_path: 'data/syn_gt/gen_5.csv'
+
+models:
+  model_1: "models/utility_eval/classifier_trained_real_HO1.pth"
+  model_2: "models/utility_eval/classifier_trained_real_HO2.pth"
+  model_3: "models/utility_eval/classifier_trained_real_HO3.pth"
+  model_4: "models/utility_eval/classifier_trained_real_HO4.pth"
+  model_5: "models/utility_eval/classifier_trained_real_HO5.pth"
+
+columns:
+  real_img_path: "image_path"
+  syn_img_path: "syn_path"
+  target: "label"
+  split_col: "split"
+
+num_trains: 5
+
+training:
+  num_epochs: 20
+  batch_size: 128
+  learning_rate: 0.001
+  val_interval: 1
+
+split:
+  train_size: 0.9
+  val_size: 0.1
+
+output:
+  results_dir: "results/subpop_eval"
