@@ -1,4 +1,4 @@
-# Attribute-based classification experiment script using MONAI (2D CT slices, ImageNet pretrained)
+# train the a classifier, but with multi-task (2 prediction heads, one for sex one for age_group)
 import os
 import torch
 import yaml
@@ -11,8 +11,10 @@ from monai.transforms import Compose, LoadImaged, ScaleIntensityd, NormalizeInte
 from monai.losses import FocalLoss
 from monai.networks.nets import DenseNet121
 from monai.metrics import ROCAUCMetric
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report
 from torch.utils.data import DataLoader
+import torch
+from torch import nn
 import random
 import csv
 
@@ -20,21 +22,25 @@ import csv
 with open("config/experiments/covid_exps.yaml", "r") as f:
     config = yaml.safe_load(f)
     
-DEBUG = config["DEBUG"]
-metadata_path = config["paths"]["metadata_csv"]
-image_col = config["paths"]["image_column"]
-label_cols = config["labeling"]["attribute_columns"]
-normalize_labels = config["labeling"].get("normalize_labels", True)
+paths = config["paths"]
+target_cols = config["labeling"]["attribute_columns"]
+normalize_target = config["labeling"].get("normalize_labels", True)
 training = config["training"]
 split = config["split"]
 output = config["output"]
 
 # ============== SETUP LOGGING ==============
 os.makedirs(output["results_dir"], exist_ok=True)
-csv_columns = ["seed", "train_loss", "f1", "acc", "recall", "precision", "auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
+csv_columns = ["seed", "train_loss",
+               "val_f1_sex", "val_acc_sex", "val_recall_sex", "val_precision_sex", "val_auc_sex",
+               "val_f1_age", "val_acc_age", "val_recall_age", "val_precision_age", "val_auc_age", 
+               "val_f1_avg", "val_acc_avg", "val_recall_avg", "val_precision_avg", "val_auc_avg",
+               "test_f1_sex", "test_acc_sex", "test_auc_sex", "test_recall_sex", "test_precision_sex",
+               "test_f1_age", "test_acc_age", "test_auc_age", "test_recall_age", "test_precision_age",
+               "test_f1_avg", "test_acc_avg", "test_auc_avg", "test_recall_avg", "test_precision_avg"]
 
-label_name = label_cols[0] if len(label_cols) == 1 else "_".join(label_cols)
-log_path = os.path.join(output["results_dir"], f"experiment_{label_name}.csv")
+target_name = target_cols[0] if len(target_cols) == 1 else "_".join(target_cols) #concatenate target col(s) into single string for name of experiment
+log_path = os.path.join(output["results_dir"], f"experiment_multi.csv")
 log_file_exists = os.path.exists(log_path)
 
 log_f = open(log_path, "a", newline="")
@@ -42,26 +48,48 @@ writer = csv.DictWriter(log_f, fieldnames=csv_columns)
 if not log_file_exists:
     writer.writeheader()
 
-# ========== Load and preprocess data ==========
+# ========== Load and preprocess REAL TEST data ========== (we only need to do this once)
 print("Reading metadata ...")
-df = pd.read_csv(metadata_path)
-print(f"Running experiment on: {label_cols}")
+df = pd.read_csv(paths["metadata_csv"])
+df = df[df["use"] == True]
 
-# Combine label columns if more than one attribute
-if len(label_cols) == 1:
-    df["label"] = df[label_cols[0]]
-else:
-    df["label"] = df[label_cols].astype(str).agg("_".join, axis=1)
+print(f"Running experiment on: {target_cols}")
+# prepare each target column as category codes encoded into integers
+# extract target class mappings before encoding
+target_maps = {}
+for col in target_cols:
+    categories = df[col].astype("category")
+    target_maps[col] = dict(enumerate(categories.cat.categories))
+    if normalize_target:
+        df[col] = categories.cat.codes
+print(target_maps)
+num_classes_dict = {col: len(mapping) for col, mapping in target_maps.items()}
 
-# Encode labels to integers
-if normalize_labels:
-    df["label"] = df["label"].astype("category").cat.codes
-label_map = dict(enumerate(df["label"].astype("category").cat.categories))
-num_classes = len(label_map)
+# ========== Helper Functions and Classes ==========
+def assign_split(df, split_name):
+    # Assign split labels
+    df = df[['patient_id']].copy()
+    df['new_split'] = split_name
+    return df
+class MultiTaskDenseNet(nn.Module):
+    def __init__(self, num_classes_sex, num_classes_age):
+        super().__init__()
+        # Use out_channels=1 to avoid error, then ignore the final classifier
+        densenet = DenseNet121(spatial_dims=2, in_channels=3, out_channels=1, pretrained=True)
+        self.backbone = densenet.features
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.head_sex = nn.Linear(1024, num_classes_sex)
+        self.head_age = nn.Linear(1024, num_classes_age)
 
-# ========== Helper Functions ==========
-def build_monai_data(df_subset):
-    return [{"img": row[image_col], "label": int(row["label"])} for _, row in df_subset.iterrows()]
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.avgpool(x).flatten(1)
+        return self.head_sex(x), self.head_age(x)
+
+def build_monai_data(df_subset, image_col):
+    return [{"img": row[image_col], "sex_target": int(row["sex"]), "age_target": int(row["age_group"])}
+            for _, row in df_subset.iterrows()
+    ]
 
 def get_train_transform():
     return Compose([
@@ -97,27 +125,32 @@ def get_eval_transform():
         Resized(keys=["img"], spatial_size=(256, 256)),
     ])
 
-def train_model(train_df, val_df, seed):
+def train_model(train_df, val_df, num_classes_dict, seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using CUDA: {torch.cuda.is_available()}")
-    # use pretrained ImageNet weights
-    model = DenseNet121(spatial_dims=2, in_channels=3, out_channels=num_classes, pretrained=True).to(device)
+    # use pretrained ImageNet weights (encoded in the backbone of this model class)
+    model = MultiTaskDenseNet(num_classes_dict["sex"], num_classes_dict["age_group"]).to(device)
 
-    loss_fn = FocalLoss(to_onehot_y=True, use_softmax=True)
+    loss_fn_sex = FocalLoss(to_onehot_y=True, use_softmax=True)
+    loss_fn_age = FocalLoss(to_onehot_y=True, use_softmax=True)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
-    auc_metric = ROCAUCMetric(average="macro")
+    auc_metric_sex = ROCAUCMetric(average="macro")
+    auc_metric_age = ROCAUCMetric(average="macro")
     post_pred = Compose([Activations(softmax=True)])
-    post_label = Compose([AsDiscrete(to_onehot=num_classes)])
-    post_discrete = AsDiscrete(argmax=True, to_onehot=num_classes)
+    post_target_sex = Compose([AsDiscrete(to_onehot=num_classes_dict["sex"])])
+    post_discrete_sex = AsDiscrete(argmax=True, to_onehot=num_classes_dict["sex"])
+    post_target_age = Compose([AsDiscrete(to_onehot=num_classes_dict["age_group"])])
+    post_discrete_age = AsDiscrete(argmax=True, to_onehot=num_classes_dict["age_group"])
 
-    train_ds = Dataset(data=build_monai_data(train_df), transform=get_train_transform())
-    val_ds = Dataset(data=build_monai_data(val_df), transform=get_eval_transform())
+    train_ds = Dataset(data=build_monai_data(train_df, paths["image_column"]), transform=get_train_transform())
+    val_ds = Dataset(data=build_monai_data(val_df, paths["image_column"]), transform=get_eval_transform())
 
     train_loader = DataLoader(train_ds, batch_size=training["batch_size"], shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=training["batch_size"], shuffle=False, num_workers=2)
@@ -131,10 +164,14 @@ def train_model(train_df, val_df, seed):
         model.train()
         total_loss = 0
         for batch in tqdm(train_loader, desc=f"[Seed {seed}] Epoch {epoch+1}"):
-            x, y = batch["img"].to(device), batch["label"].to(device).long()
+            x = batch["img"].to(device)
+            y_sex = batch["sex_target"].to(device).long()
+            y_age = batch["age_target"].to(device).long()
+
             optimizer.zero_grad()
-            pred = model(x)
-            loss = loss_fn(pred, y)
+
+            pred_sex, pred_age = model(x)
+            loss = loss_fn_sex(pred_sex, y_sex) + loss_fn_age(pred_age, y_age)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -142,114 +179,201 @@ def train_model(train_df, val_df, seed):
 
         # Validation
         model.eval()
-        y_pred = torch.tensor([], dtype=torch.float32, device=device)
-        y = torch.tensor([], dtype=torch.long, device=device)
+        pred_sex = torch.tensor([], dtype=torch.float32, device=device)
+        y_sex = torch.tensor([], dtype=torch.long, device=device)
+        pred_age = torch.tensor([], dtype=torch.float32, device=device)
+        y_age = torch.tensor([], dtype=torch.long, device=device)
         with torch.no_grad():
             for batch in val_loader:
                 x = batch["img"].to(device)
-                labels = batch["label"].to(device)
-                outputs = model(x)
-                y_pred = torch.cat([y_pred, outputs], dim=0)
-                y = torch.cat([y, labels], dim=0)
+                target_sex = batch["sex_target"].to(device).long()
+                target_age = batch["age_target"].to(device).long()
+                output_sex, output_age = model(x)
+                pred_sex = torch.cat([pred_sex, output_sex], dim=0)
+                y_sex = torch.cat([y_sex, target_sex], dim=0)
+                pred_age = torch.cat([pred_age, output_age], dim=0)
+                y_age = torch.cat([y_age, target_age], dim=0)
 
         # Post-processing directly on the full batch
-        y_pred_probs = post_pred(y_pred) # no need to decollate here
-        y_true = [post_label(i) for i in decollate_batch(y, detach=False)]
-        y_pred_bin = [post_discrete(i) for i in decollate_batch(y_pred_probs, detach=False)]
-        y_pred_classes = torch.stack([p.argmax(dim=0) for p in y_pred_bin]).cpu().numpy()
-        y_true_classes = torch.stack([t.argmax(dim=0) for t in y_true]).cpu().numpy()
+        # SEX
+        pred_sex_probs = post_pred(pred_sex)
+        y_true_sex = [post_target_sex(i) for i in decollate_batch(y_sex, detach=False)]
+        y_pred_sex_bin = [post_discrete_sex(i) for i in decollate_batch(pred_sex_probs, detach=False)]
+        y_pred_sex_classes = torch.stack([p.argmax(dim=0) for p in y_pred_sex_bin]).cpu().numpy()
+        y_true_sex_classes = torch.stack([t.argmax(dim=0) for t in y_true_sex]).cpu().numpy()
+        # AGE GROUPS
+        pred_age_probs = post_pred(pred_age)
+        y_true_age = [post_target_age(i) for i in decollate_batch(y_age, detach=False)]
+        y_pred_age_bin = [post_discrete_age(i) for i in decollate_batch(pred_age_probs, detach=False)]
+        y_pred_age_classes = torch.stack([p.argmax(dim=0) for p in y_pred_age_bin]).cpu().numpy()
+        y_true_age_classes = torch.stack([t.argmax(dim=0) for t in y_true_age]).cpu().numpy()
 
-        auc_metric.reset()
-        auc_metric(y_pred_probs, y_true)
-        auc = auc_metric.aggregate().item()
-        acc = accuracy_score(y_true_classes, y_pred_classes)
-        f1 = f1_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-        recall = recall_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-        precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+        # Compute metrics separately
+        # SEX
+        auc_metric_sex.reset()
+        auc_metric_sex(pred_sex_probs, y_true_sex)
+        auc_sex = auc_metric_sex.aggregate().item()
+        acc_sex = accuracy_score(y_true_sex_classes, y_pred_sex_classes)
+        f1_sex = f1_score(y_true_sex_classes, y_pred_sex_classes, average='macro', zero_division=0)
+        recall_sex = recall_score(y_true_sex_classes, y_pred_sex_classes, average='macro', zero_division=0)
+        precision_sex = precision_score(y_true_sex_classes, y_pred_sex_classes, average='macro', zero_division=0)
+        print(f"Epoch {epoch+1} VAL: SEX_ACC={acc_sex:.4f}, SEX_F1={f1_sex:.4f}, SEX_AUC={auc_sex:.4f}, SEX_REC={recall_sex:.4f}, SEX_PREC={precision_sex:.4f}")
+        # AGE 
+        auc_metric_age.reset()
+        auc_metric_age(pred_age_probs, y_true_age)
+        auc_age = auc_metric_age.aggregate().item()
+        acc_age = accuracy_score(y_true_age_classes, y_pred_age_classes)
+        f1_age = f1_score(y_true_age_classes, y_pred_age_classes, average='macro', zero_division=0)
+        recall_age = recall_score(y_true_age_classes, y_pred_age_classes, average='macro', zero_division=0)
+        precision_age = precision_score(y_true_age_classes, y_pred_age_classes, average='macro', zero_division=0)
+        print(f"Epoch {epoch+1} VAL: AGE_ACC={acc_age:.4f}, AGE_F1={f1_age:.4f}, AGE_AUC={auc_age:.4f}, AGE_REC={recall_age:.4f}, AGE_PREC={precision_age:.4f}")
 
-        print(f"Epoch {epoch+1} VAL: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
+        # AVERAGE METRICS 
+        avg_f1 = (f1_sex + f1_age) / 2
+        avg_auc = (auc_sex + auc_age) / 2
+        avg_acc = (acc_sex + acc_age) / 2
+        avg_rec = (recall_sex + recall_age) / 2
+        avg_prec = (precision_sex + precision_age) / 2
+        # Scheduler step
+        scheduler.step(1 - avg_f1)
 
-        scheduler.step(1 - f1)
-
-        if f1 > best_f1 or (f1 == best_f1 and auc > best_auc):
-            best_f1 = f1
-            best_auc = auc
+        if avg_f1 > best_f1 or (avg_f1 == best_f1 and avg_auc > best_auc):
+            best_f1 = avg_f1
+            best_auc = avg_auc
             best_metrics = {
                 "train_loss": total_loss,
-                "f1": f1, "acc": acc, "recall": recall,
-                "precision": precision, "auc": auc
+                "val_f1_sex": f1_sex, "val_acc_sex": acc_sex, "val_recall_sex": recall_sex, "val_precision_sex": precision_sex, "val_auc_sex": auc_sex,
+                "val_f1_age": f1_age, "val_acc_age": acc_age, "val_recall_age": recall_age, "val_precision_age": precision_age, "val_auc_age": auc_age,
+                "val_f1_avg": avg_f1, "val_acc_avg": avg_acc, "val_recall_avg": avg_rec, "val_precision_avg": avg_prec, "val_auc_avg": avg_auc
             }
-            if output["save_models"]:
-                best_model_state = model.state_dict()
+            # save state of model as the best state. Also works or should i do model.backbone.state_dict()?
+            best_model_state = model.state_dict()
 
-    print(f"Best F1: {best_f1:.4f}, AUC: {best_auc:.4f}")
     return best_metrics, best_model_state
 
-def evaluate_on_test(best_model_state, test_df):
+def evaluate_on_test(best_model_state, test_df, num_classes_dict, target_maps):
     print("Evaluating on TEST ...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = DenseNet121(spatial_dims=2, in_channels=3, out_channels=num_classes, pretrained=True).to(device)
-    model.load_state_dict(best_model_state)
+    model = MultiTaskDenseNet(num_classes_dict["sex"], num_classes_dict["age_group"]).to(device)
+    model.load_state_dict(best_model_state) # does this work or needs to be loaded into the backbone?
     model.eval()
 
-    test_ds = Dataset(data=build_monai_data(test_df), transform=get_eval_transform())
-    test_loader = DataLoader(test_ds, batch_size=1, num_workers=2)
+    test_ds = Dataset(data=build_monai_data(test_df, paths["image_column"]), transform=get_eval_transform())
+    test_loader = DataLoader(test_ds, batch_size=training["batch_size"], num_workers=2) # changed batch size from 1 to param batch size
+    
+    auc_metric_sex = ROCAUCMetric(average="macro")
+    auc_metric_age = ROCAUCMetric(average="macro")
+    post_pred = Compose([Activations(softmax=True)])
+    post_target_sex = Compose([AsDiscrete(to_onehot=num_classes_dict["sex"])])
+    post_discrete_sex = AsDiscrete(argmax=True, to_onehot=num_classes_dict["sex"])
+    post_target_age = Compose([AsDiscrete(to_onehot=num_classes_dict["age_group"])])
+    post_discrete_age = AsDiscrete(argmax=True, to_onehot=num_classes_dict["age_group"])
 
-    post_pred = Activations(softmax=True)
-    post_label = AsDiscrete(to_onehot=num_classes)
-    post_discrete = AsDiscrete(argmax=True, to_onehot=num_classes)
-    auc_metric = ROCAUCMetric(average="macro")
-
-    y_pred = torch.tensor([], dtype=torch.float32, device=device)
-    y = torch.tensor([], dtype=torch.long, device=device)
+    pred_sex = torch.tensor([], dtype=torch.float32, device=device)
+    y_sex = torch.tensor([], dtype=torch.long, device=device)
+    pred_age = torch.tensor([], dtype=torch.float32, device=device)
+    y_age = torch.tensor([], dtype=torch.long, device=device)
     with torch.no_grad():
-        for batch in test_loader:
+        for batch in tqdm(test_loader, desc="Evaluating"):
             x = batch["img"].to(device)
-            labels = batch["label"].to(device)
-            outputs = model(x)
-            y_pred = torch.cat([y_pred, outputs], dim=0)
-            y = torch.cat([y, labels], dim=0)
+            target_sex = batch["sex_target"].to(device).long()
+            target_age = batch["age_target"].to(device).long()
+            output_sex, output_age = model(x)
+            pred_sex = torch.cat([pred_sex, output_sex], dim=0)
+            y_sex = torch.cat([y_sex, target_sex], dim=0)
+            pred_age = torch.cat([pred_age, output_age], dim=0)
+            y_age = torch.cat([y_age, target_age], dim=0)
 
     # Post-processing directly on the full batch
-    y_pred_probs = post_pred(y_pred) # no need to decollate here
-    y_true = [post_label(i) for i in decollate_batch(y, detach=False)]
-    y_pred_bin = [post_discrete(i) for i in decollate_batch(y_pred_probs, detach=False)]
-    y_pred_classes = torch.stack([p.argmax(dim=0) for p in y_pred_bin]).cpu().numpy()
-    y_true_classes = torch.stack([t.argmax(dim=0) for t in y_true]).cpu().numpy()
+    # SEX
+    pred_sex_probs = post_pred(pred_sex)
+    y_true_sex = [post_target_sex(i) for i in decollate_batch(y_sex, detach=False)]
+    y_pred_sex_bin = [post_discrete_sex(i) for i in decollate_batch(pred_sex_probs, detach=False)]
+    y_pred_sex_classes = torch.stack([p.argmax(dim=0) for p in y_pred_sex_bin]).cpu().numpy()
+    y_true_sex_classes = torch.stack([t.argmax(dim=0) for t in y_true_sex]).cpu().numpy()
+    # AGE GROUPS
+    pred_age_probs = post_pred(pred_age)
+    y_true_age = [post_target_age(i) for i in decollate_batch(y_age, detach=False)]
+    y_pred_age_bin = [post_discrete_age(i) for i in decollate_batch(pred_age_probs, detach=False)]
+    y_pred_age_classes = torch.stack([p.argmax(dim=0) for p in y_pred_age_bin]).cpu().numpy()
+    y_true_age_classes = torch.stack([t.argmax(dim=0) for t in y_true_age]).cpu().numpy()
 
-    auc_metric.reset()
-    auc_metric(y_pred_probs, y_true)
-    auc = auc_metric.aggregate().item()
-    acc = accuracy_score(y_true_classes, y_pred_classes)
-    f1 = f1_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-    recall = recall_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-    precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
+    # Compute metrics separately
+    # SEX
+    auc_metric_sex.reset()
+    auc_metric_sex(pred_sex_probs, y_true_sex)
+    auc_sex = auc_metric_sex.aggregate().item()
+    acc_sex = accuracy_score(y_true_sex_classes, y_pred_sex_classes)
+    f1_sex = f1_score(y_true_sex_classes, y_pred_sex_classes, average='macro', zero_division=0)
+    recall_sex = recall_score(y_true_sex_classes, y_pred_sex_classes, average='macro', zero_division=0)
+    precision_sex = precision_score(y_true_sex_classes, y_pred_sex_classes, average='macro', zero_division=0)
+    print(f"TEST: SEX_ACC={acc_sex:.4f}, SEX_F1={f1_sex:.4f}, SEX_AUC={auc_sex:.4f}, SEX_REC={recall_sex:.4f}, SEX_PREC={precision_sex:.4f}")
+    print("=== SEX CLASSIFICATION REPORT ===")
+    print(classification_report(y_true_sex_classes, y_pred_sex_classes,
+        target_names=list(target_maps["sex"].values()),  # Will show 'F' and 'M'
+        digits=4, zero_division=0
+    ))
 
-    print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}")
+    # AGE 
+    auc_metric_age.reset()
+    auc_metric_age(pred_age_probs, y_true_age)
+    auc_age = auc_metric_age.aggregate().item()
+    acc_age = accuracy_score(y_true_age_classes, y_pred_age_classes)
+    f1_age = f1_score(y_true_age_classes, y_pred_age_classes, average='macro', zero_division=0)
+    recall_age = recall_score(y_true_age_classes, y_pred_age_classes, average='macro', zero_division=0)
+    precision_age = precision_score(y_true_age_classes, y_pred_age_classes, average='macro', zero_division=0)
+    print(f"TEST: AGE_ACC={acc_age:.4f}, AGE_F1={f1_age:.4f}, AGE_AUC={auc_age:.4f}, AGE_REC={recall_age:.4f}, AGE_PREC={precision_age:.4f}")
+    print("=== AGE GROUP CLASSIFICATION REPORT ===")
+    print(classification_report(y_true_age_classes, y_pred_age_classes,
+        target_names=list(target_maps["age_group"].values()),  # Will show real age bin labels
+        digits=4, zero_division=0
+    ))
 
-    return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision}
+    # AVERAGE METRICS 
+    avg_f1 = (f1_sex + f1_age) / 2
+    avg_auc = (auc_sex + auc_age) / 2
+    avg_acc = (acc_sex + acc_age) / 2
+    avg_rec = (recall_sex + recall_age) / 2
+    avg_prec = (precision_sex + precision_age) / 2
+
+    return {"test_f1_sex": f1_sex, "test_acc_sex": acc_sex, "test_auc_sex": auc_sex, "test_recall_sex": recall_sex, "test_precision_sex": precision_sex,
+            "test_f1_age": f1_age, "test_acc_age": acc_age, "test_auc_age": auc_age, "test_recall_age": recall_age, "test_precision_age": precision_age,
+            "test_f1_avg": avg_f1, "test_acc_avg": avg_acc, "test_auc_avg": avg_auc, "test_recall_avg": avg_rec, "test_precision_avg": avg_prec}
+
 
 # ========== Run Experiments ==========
-# DEBUG check (should be placed outside the loop)
-if DEBUG:
-    print("[DEBUG MODE] Sampling small subset of the data for quick run...")
-    df, _ = train_test_split(df, train_size=300, stratify=df["label"], random_state=100)
-    df = df.reset_index(drop=True)
+for i in range(0, training["num_runs"]):
+    print(f"\n=== Seed {i} ===")
 
-for seed in range(training["num_runs"]):
-    print(f"\n=== Experiment {seed} ===")
-    train_df, temp_df = train_test_split(df, train_size=split["train_size"], stratify=df["label"], random_state=seed)
-    val_df, test_df = train_test_split(temp_df, test_size=split["test_size"] / (split["test_size"] + split["val_size"]), stratify=temp_df["label"], random_state=seed)
+    patient_info = df.groupby("patient_id").agg({"age_group":'nunique', 'sex':'nunique'}).reset_index()
+    # Split into test, train, val
+    temp_train_val, test_patients = train_test_split(patient_info,
+        test_size=split["test_size"],
+        stratify=patient_info[['sex', 'age_group']],
+        random_state=i
+    )
+    train_patients, val_patients = train_test_split(temp_train_val,
+        test_size=(split["val_size"]/(split["val_size"]+split["train_size"])),  
+        stratify=temp_train_val[['sex', 'age_group']],
+        random_state=i
+    )
+    split_assignments = pd.concat([assign_split(test_patients, 'test'), assign_split(train_patients, 'train'), assign_split(val_patients, 'val')])
 
-    train_metrics, best_model_state = train_model(train_df, val_df, seed)
+    # Merge back and filter
+    df_split = df.merge(split_assignments, on='patient_id', how='left')
+    print(df_split["new_split"].value_counts(normalize=True))
+    train_df = df_split[df_split['new_split']=="train"]
+    val_df = df_split[df_split['new_split']=="val"]
+    test_df = df_split[df_split['new_split']=="test"]
 
-    if best_model_state is not None:
-        test_metrics = evaluate_on_test(best_model_state, test_df)
-        # save results
-        writer.writerow({"seed": seed, **train_metrics, **test_metrics})
-    else:
-        # just save train results
-        writer.writerow({"seed": seed, **train_metrics})
+    # train the model on the subset_df set
+    train_metrics, best_model_state = train_model(train_df, val_df, num_classes_dict=num_classes_dict, seed=i)
+
+    # evaluate trained model on the real test data
+    test_metrics = evaluate_on_test(best_model_state, test_df, num_classes_dict, target_maps)
+    # save results
+    writer.writerow({"seed": i, **train_metrics, **test_metrics})
+    
     log_f.flush()
 
 log_f.close()
