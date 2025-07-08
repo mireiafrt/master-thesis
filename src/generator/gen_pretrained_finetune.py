@@ -367,7 +367,7 @@ for epoch in range(n_epochs):
 
                     # compute ms-ssim and ssim metrics and store
                     ms_ssim_scores.append(ms_ssim(images, latent_hat))
-                    ssim_scores.append(ssim(images, latent_hat))
+                    ssim_scores.append(ssim(latent_hat, latent_hat))
 
                     # Prepare images for FID (resize, 3ch, normalize)
                     real_proc = torch.stack([fid_transform({"image": img})["image"] for img in images])
