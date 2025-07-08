@@ -41,7 +41,7 @@ syn_paths = [paths["syn_1_path"], paths["syn_2_path"], paths["syn_3_path"], path
 # ============== SETUP LOGGING ==============
 os.makedirs(output["results_dir"], exist_ok=True)
 csv_columns = ["num_train", "syn_set", "train_loss", "val_f1", "val_acc", "val_recall", "val_precision", "val_auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
-log_path = os.path.join(output["results_dir"], "general.csv")
+log_path = os.path.join(output["results_dir"], "general_5runs.csv")
 log_file_exists = os.path.exists(log_path)
 
 log_f = open(log_path, "a", newline="")
@@ -234,7 +234,7 @@ def evaluate_on_test(best_model_state, test_df, image_path_col):
 # train as many models as num_trains, later aggregate results accordingly
 for j in range (0, num_trains):
     # first train a model with the real hold-out data (train_df and val_df)
-    print("Training model")
+    print(f"Training model {j+1}")
     train_metrics, best_model_state = train_model(train_df, val_df)
     # Create the output directory if it doesn't exist
     os.makedirs(output["model_output"], exist_ok=True)
@@ -280,6 +280,7 @@ def mean_ci(results_array):
 test_metrics = ["test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
 results_df = pd.read_csv(log_path)
 for j in range(0, num_trains):
+    print(f"Train run: {j+1}")
     for metric in test_metrics:
         # get result of REAL test on the metric
         real_metric_result = results_df[(results_df['num_train']==j+1)&(results_df['syn_set']==0)][metric].values
