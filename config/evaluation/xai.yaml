@@ -1,0 +1,16 @@
+paths:
+  imgs_csv: '/home/coder/project/covidxct/proc_slices_metadata.csv'
+  trained_models: "models/utility_eval"
+
+columns:
+  img_path: "image_path"
+  target: "label"
+  split_col: "split"
+  split_val: "test"
+
+batch_size: 128
+
+num_models: 1
+
+output:
+  results_dir: "results/XAI"
