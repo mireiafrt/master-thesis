@@ -1,5 +1,5 @@
 paths:
-  real_imgs_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/proc_slices_metadata.csv'
+  real_imgs_csv: '/home/coder/project/covidxct/proc_slices_metadata.csv'
   syn_1_path: 'data/syn_test/gen_1.csv'
   syn_2_path: 'data/syn_test/gen_2.csv'
   syn_3_path: 'data/syn_test/gen_3.csv'
@@ -12,7 +12,7 @@ columns:
   target: "label"
   split_col: "split"
 
-subgroups: False
+num_trains: 5
 
 training:
   num_epochs: 20
@@ -26,7 +26,7 @@ split:
 
 output:
   results_dir: "results/utility_train"
-  real_model_output: "models/utility_train/classifier_trained_real_test.pth"
+  real_model_output: "models/utility_train"
   syn_model_output_1: "models/utility_train/classifier_trained_syn_1.pth"
   syn_model_output_2: "models/utility_train/classifier_trained_syn_2.pth"
   syn_model_output_3: "models/utility_train/classifier_trained_syn_3.pth"

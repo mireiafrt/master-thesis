@@ -28,6 +28,7 @@ with open("config/evaluation/general_utility_training.yaml", "r") as f:
     
 paths = config["paths"]
 columns = config["columns"]
+num_trains = config["num_trains"]
 training = config["training"]
 split = config["split"]
 output = config["output"]
@@ -36,8 +37,8 @@ syn_paths = [paths["syn_1_path"], paths["syn_2_path"], paths["syn_3_path"], path
 
 # ============== SETUP LOGGING ==============
 os.makedirs(output["results_dir"], exist_ok=True)
-csv_columns = ["syn_set", "train_loss", "val_f1", "val_acc", "val_recall", "val_precision", "val_auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
-log_path = os.path.join(output["results_dir"], "general.csv")
+csv_columns = ["test_set", "syn_set", "train_loss", "val_f1", "val_acc", "val_recall", "val_precision", "val_auc", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
+log_path = os.path.join(output["results_dir"], "general_5runs.csv")
 log_file_exists = os.path.exists(log_path)
 
 log_f = open(log_path, "a", newline="")
@@ -104,7 +105,7 @@ def train_model(train_df, val_df, syn_set_num, image_path_col):
 
     loss_fn = FocalLoss(to_onehot_y=True, use_softmax=True, gamma=2.0)
     optimizer = torch.optim.Adam(model.parameters(), lr=training["learning_rate"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
     auc_metric = ROCAUCMetric(average="macro")
     post_pred = Compose([Activations(softmax=True)])
@@ -226,21 +227,26 @@ def evaluate_on_test(best_model_state, test_df):
 
 # ========== Run Experiments ==========
 
-# FIRST EXPERIMENT: TRAIN ON REAL and EVAL ON REAL (hold-out)
-print("Training model on REAL test set")
-# split train_df into train-val
-train_df, val_df = train_test_split(test_df, train_size=split["train_size"], stratify=test_df[columns["target"]], random_state=42)
-# train model
-train_metrics, best_model_state = train_model(train_df, val_df, syn_set_num=0, image_path_col=columns["real_img_path"])
-# save the model for possible future uses
-os.makedirs(os.path.dirname(output["real_model_output"]), exist_ok=True)
-torch.save(best_model_state, output["real_model_output"])
-print("Saved best model")
-# Evaluate on real holdout
-print("Evaluating on REAL HOLD-OUT")
-test_metrics = evaluate_on_test(best_model_state, hold_out_df)
-writer.writerow({"syn_set": 0, **train_metrics, **test_metrics})
-log_f.flush()
+# FIRST EXPERIMENT: TRAIN ON REAL and EVAL ON REAL (hold-out) 
+for j in range(0, num_trains):
+    print(f"Training model on REAL test set {j+1}")
+    # split train_df into train-val
+    train_df, val_df = train_test_split(test_df, train_size=split["train_size"], stratify=test_df[columns["target"]], random_state=j)
+    # train model
+    train_metrics, best_model_state = train_model(train_df, val_df, syn_set_num=0, image_path_col=columns["real_img_path"])
+    # create output dir if does not exits
+    os.makedirs(output["real_model_output"], exist_ok=True)
+    # construct full path to save model
+    file_name = "classifier_trained_real_test" + str(j+1) + ".pth"
+    save_path = os.path.join(output["real_model_output"], file_name)
+    # save the model
+    torch.save(best_model_state, save_path)
+    print("Saved best model")
+    # Evaluate on real holdout
+    print("Evaluating on REAL HOLD-OUT")
+    test_metrics = evaluate_on_test(best_model_state, hold_out_df)
+    writer.writerow({"test_set": j+1, "syn_set": 0, **train_metrics, **test_metrics})
+    log_f.flush()
 
 # SECOND EXPERIMENT: Train on synthetic sets and EVAL on REAL (hold-out)
 model_output_paths = [output["syn_model_output_1"], output["syn_model_output_2"], output["syn_model_output_3"], output["syn_model_output_4"], output["syn_model_output_5"]]
@@ -256,9 +262,9 @@ for i in range(0, len(syn_paths)):
     torch.save(best_model_state, model_output_paths[i])
     print("Saved best model")
     # Evaluate on real holdout
-    print(f"Evaluating on SYN SET {i+1}")
+    print(f"Evaluating on REAL HO from model train on SYN SET {i+1}")
     test_metrics = evaluate_on_test(best_model_state, hold_out_df)
-    writer.writerow({"syn_set": i+1, **train_metrics, **test_metrics})
+    writer.writerow({"test_set": 0, "syn_set": i+1, **train_metrics, **test_metrics})
     log_f.flush()
 
 log_f.close()
@@ -280,13 +286,15 @@ def mean_ci(results_array):
 # read the log results file, and compute 95% CI intervals of all test metrics between the 5 synthetic set runs
 test_metrics = ["test_f1", "test_acc", "test_auc", "test_recall", "test_precision"]
 results_df = pd.read_csv(log_path)
-for metric in test_metrics:
-    # get result of REAL test on the metric
-    real_metric_result = results_df[results_df['syn_set']==0][metric].values
-    # get results of SYN sets on the metric
-    syn_metric_results = results_df[results_df['syn_set']!=0][metric].values
-    # subtract real result from each synthetic result to create the difference
-    metric_difference = abs(syn_metric_results - real_metric_result[0])
-    # calculate CI for the difference in the metric
-    metric_mean, metric_ci   = mean_ci(metric_difference)
-    print(f"Difference in {metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
+for j in range(0, num_trains):
+    print(f"Train run: {j+1}")
+    for metric in test_metrics:
+        # get result of REAL test on the metric
+        real_metric_result = results_df[(results_df['test_set']==j+1)&(results_df['syn_set']==0)][metric].values
+        # get results of SYN sets on the metric
+        syn_metric_results = results_df[(results_df['test_set']==0)&(results_df['syn_set']!=0)][metric].values
+        # subtract real result from each synthetic result to create the difference
+        metric_difference = abs(syn_metric_results - real_metric_result[0])
+        # calculate CI for the difference in the metric
+        metric_mean, metric_ci   = mean_ci(metric_difference)
+        print(f"Difference in {metric} : {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
