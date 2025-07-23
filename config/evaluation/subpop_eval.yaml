@@ -1,10 +1,10 @@
 paths:
-  real_imgs_csv: '/home/coder/project/covidxct/proc_slices_metadata_NEW.csv'
-  syn_1_path: 'data/syn_gt/gen_1.csv'
-  syn_2_path: 'data/syn_gt/gen_2.csv'
-  syn_3_path: 'data/syn_gt/gen_3.csv'
-  syn_4_path: 'data/syn_gt/gen_4.csv'
-  syn_5_path: 'data/syn_gt/gen_5.csv'
+  real_imgs_csv: '/home/vito/fortunom/projects/AI4Health/data/fortunom/covidxct/NEW_proc_slices_metadata.csv'
+  syn_1_path: 'data/NEW_syn_gt/gen_1.csv'
+  syn_2_path: 'data/NEW_syn_gt/gen_2.csv'
+  syn_3_path: 'data/NEW_syn_gt/gen_3.csv'
+  syn_4_path: 'data/NEW_syn_gt/gen_4.csv'
+  syn_5_path: 'data/NEW_syn_gt/gen_5.csv'
 
 models:
   model_1: "models/utility_eval/classifier_trained_real_HO1.pth"
@@ -32,4 +32,4 @@ split:
   val_size: 0.1
 
 output:
-  results_dir: "results/subpop_eval"
+  results_dir: "results/NEW_subpop_eval"

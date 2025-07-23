@@ -22,7 +22,7 @@ from monai.losses import FocalLoss
 from monai.utils import set_determinism
 from monai.networks.nets import DenseNet121
 from monai.metrics import ROCAUCMetric
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, average_precision_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, average_precision_score, matthews_corrcoef
 from torch.utils.data import DataLoader
 import random
 from scipy.stats import t
@@ -45,7 +45,7 @@ models = [models["model_1"], models["model_2"], models["model_3"], models["model
 
 # ============== SETUP LOGGING ==============
 os.makedirs(output["results_dir"], exist_ok=True)
-csv_columns = ["model", "set", "subgroup", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision", "test_auc_pr"]
+csv_columns = ["model", "set", "subgroup", "test_f1", "test_acc", "test_auc", "test_recall", "test_precision", "test_auc_pr", "test_mcc"]
 log_path = os.path.join(output["results_dir"], "results_5runs.csv")
 log_file_exists = os.path.exists(log_path)
 
@@ -117,6 +117,7 @@ def evaluate_on_test(best_model_path, test_df, image_path_col):
     if len(labels_present) < 2:
         auc = np.nan
         auc_pr = np.nan
+        mcc = np.nan
     else:
         # AUC (ROC)
         auc_metric.reset()
@@ -128,6 +129,9 @@ def evaluate_on_test(best_model_path, test_df, image_path_col):
         y_probs = y_pred_probs.cpu().numpy()
         auc_pr = average_precision_score(y_true_onehot, y_probs, average="macro")
 
+        # MATTHEW CORR COEFF
+        mcc = matthews_corrcoef(y_true_classes, y_pred_classes)
+
     acc = accuracy_score(y_true_classes, y_pred_classes)
 
     # for f1, recall, and precision, send labels so to only compute metrics for the present classes
@@ -135,10 +139,10 @@ def evaluate_on_test(best_model_path, test_df, image_path_col):
     recall = recall_score(y_true_classes, y_pred_classes, labels=labels_present, average='macro', zero_division=0)
     precision = precision_score(y_true_classes, y_pred_classes, labels=labels_present, average='macro', zero_division=0)
 
-    print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}, AUC-PR={auc_pr:.4f}")
+    print(f"TEST: ACC={acc:.4f}, F1={f1:.4f}, AUC={auc:.4f}, REC={recall:.4f}, PREC={precision:.4f}, AUC-PR={auc_pr:.4f}, MCC={mcc:.4f}")
     print(classification_report(y_true_classes, y_pred_classes,digits=4, zero_division=0))
     
-    return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision, "test_auc_pr": auc_pr}
+    return {"test_f1": f1, "test_acc": acc, "test_auc": auc, "test_recall": recall, "test_precision": precision, "test_auc_pr": auc_pr, "test_mcc": mcc}
 
 def eval_per_groups(model_num, set_name, writer, reference_combinations, best_model_state, test_df, image_path_col):
     # loop through the different subgroups
@@ -177,40 +181,5 @@ log_f.close()
 print("\nAll runs completed and logged.")
 
 # ========== COMPUTE CI INTERVALS ==========
-def mean_ci(results_array):
-    """
-    Return mean and 95 % CI across sets.
-    """
-    mean = results_array.mean()
-    sem = results_array.std(ddof=0) / np.sqrt(len(results_array))
-    # 95 % two-sided t-interval with df = K-1
-    df = len(results_array) - 1
-    t95 = t.ppf(0.975, df)  
-    ci = t95 * sem
-    return mean.item(), ci.item()
 
-# read the log results file, and compute 95% CI intervals of all test metrics between the 5 synthetic set runs
-test_metrics = ["test_f1", "test_acc", "test_auc", "test_recall", "test_precision", "test_auc_pr"]
-results_df = pd.read_csv(log_path)
-for j in range(0, num_trains):
-    print(f"Trained model {j+1}")
-    for metric in test_metrics:
-        for sex, age_group in reference_combinations:
-            filtered_df = results_df[(results_df["sex"] == sex) & (results_df["age_group"] == age_group)]
-
-            # get result of REAL GT on the metric
-            gt_metric_result = filtered_df[(filtered_df['model_num']==j+1)&(filtered_df['set_name']=="GT")][metric].values
-            # get results of REAL Test on the metric
-            test_metric_result = filtered_df[(filtered_df['model_num']==j+1)&(filtered_df['set_name']=="Test")][metric].values
-            # get results of SYN GT on the metric
-            syn_metric_result = filtered_df[(filtered_df['model_num']==j+1)&(filtered_df['set_name'].str.startswith("SYN"))][metric].values
-
-            # COMPARE REAL GT to SYN GT
-            metric_difference = abs(syn_metric_result - gt_metric_result[0])
-            metric_mean, metric_ci   = mean_ci(metric_difference)
-            print(f"GT-SYN: Difference in {metric} for {sex}-{age_group}: {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
-
-            # COMPARE REAL Test to SYN GT
-            metric_difference = abs(syn_metric_result - test_metric_result[0])
-            metric_mean, metric_ci   = mean_ci(metric_difference)
-            print(f"Test-SYN: Difference in {metric} for {sex}-{age_group}: {metric_mean:.6f} ± {metric_ci:.6f}  (95 % CI, n={len(syn_paths)})")
+# analysis better in notebook
