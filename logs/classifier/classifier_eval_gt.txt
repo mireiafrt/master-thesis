@@ -1,24 +1,0 @@
-nohup: ignoring input
-Using CUDA (NVIDIA GPU)
-Evaluating:   0%|          | 0/31 [00:00<?, ?it/s]Evaluating:   3%|▎         | 1/31 [00:05<02:30,  5.00s/it]Evaluating:  10%|▉         | 3/31 [00:07<01:06,  2.39s/it]Evaluating:  16%|█▌        | 5/31 [00:10<00:47,  1.83s/it]Evaluating:  19%|█▉        | 6/31 [00:11<00:37,  1.48s/it]Evaluating:  23%|██▎       | 7/31 [00:14<00:46,  1.95s/it]Evaluating:  29%|██▉       | 9/31 [00:16<00:36,  1.65s/it]Evaluating:  35%|███▌      | 11/31 [00:18<00:28,  1.42s/it]Evaluating:  42%|████▏     | 13/31 [00:20<00:22,  1.26s/it]Evaluating:  48%|████▊     | 15/31 [00:23<00:20,  1.29s/it]Evaluating:  55%|█████▍    | 17/31 [00:25<00:16,  1.19s/it]Evaluating:  61%|██████▏   | 19/31 [00:27<00:13,  1.14s/it]Evaluating:  65%|██████▍   | 20/31 [00:28<00:13,  1.19s/it]Evaluating:  68%|██████▊   | 21/31 [00:29<00:09,  1.01it/s]Evaluating:  71%|███████   | 22/31 [00:31<00:10,  1.17s/it]Evaluating:  77%|███████▋  | 24/31 [00:33<00:07,  1.13s/it]Evaluating:  84%|████████▍ | 26/31 [00:35<00:05,  1.15s/it]Evaluating:  87%|████████▋ | 27/31 [00:35<00:03,  1.00it/s]Evaluating:  90%|█████████ | 28/31 [00:37<00:03,  1.23s/it]Evaluating:  94%|█████████▎| 29/31 [00:38<00:02,  1.07s/it]Evaluating:  97%|█████████▋| 30/31 [00:42<00:01,  1.80s/it]Evaluating: 100%|██████████| 31/31 [00:42<00:00,  1.40s/it]Evaluating: 100%|██████████| 31/31 [00:42<00:00,  1.38s/it]
-Predictions saved to data/predictions_gt.csv
-Accuracy: 0.6452
-AUC: 0.6923
-F1-score: 0.7027
-Recall: 0.7222
-Precision: 0.6842
-Confusion Matrix:
-[[ 7  6]
- [ 5 13]]
-FPR/FNR by Gender:
-  Patient Sex     FPR    FNR   N
-0           F  0.6667  0.200  16
-1           M  0.2857  0.375  15
-
-FPR/FNR by Age Group:
-  age_group   FPR     FNR   N
-0     60-80  0.25  0.3000  14
-1     40-60  0.60  0.3333   8
-2     20-40  0.00  0.0000   2
-3   Over 80  1.00  0.5000   4
-4  Under 20  0.00  0.0000   3
