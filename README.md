@@ -95,7 +95,7 @@ The project involves downloading and processing real-world datasets, training La
    ```
 
 ### Evaluate the downstream model
-    Example:
+   Example:
    ```bash
    python src/evaluation/subpopulation_bias_eval/subpop_bias_eval.py
    ```
