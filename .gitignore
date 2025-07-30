@@ -5,3 +5,4 @@ logs/
 env/
 results/
 .venv/
+notebooks/covid_metadata_eda.ipynb
