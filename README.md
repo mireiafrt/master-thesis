@@ -1,4 +1,4 @@
-# 🧠 Master Thesis Project: Evaluating Medical AI Models Using Synthetic Data
+# 🧠 Master Thesis Project: Evaluating Medical AI with Demography-Conditioned Synthetic Test Sets
 
 This repository contains the codebase, experiments, and configurations for my Master's thesis project on synthetic CT scan data generation conditioned on demographic metadata to evaluate the robustness and fairness of medical AI models.
 
